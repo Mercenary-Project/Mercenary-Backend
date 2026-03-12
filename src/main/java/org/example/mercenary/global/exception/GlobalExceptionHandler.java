@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.example.mercenary.global.dto.ApiResponseDto;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -28,6 +29,13 @@ public class GlobalExceptionHandler {
         log.warn("Validation failed: {}", firstErrorMessage);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponseDto.error(400, firstErrorMessage));
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ApiResponseDto<?>> handleDataIntegrityViolationException(DataIntegrityViolationException e) {
+        log.error("Data integrity violation", e);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponseDto.error(400, "데이터 저장 중 제약 조건 오류가 발생했습니다."));
     }
 
     @ExceptionHandler(Exception.class)

@@ -1,7 +1,23 @@
 package org.example.mercenary.domain.application.entity;
 
-import jakarta.persistence.*;
-import lombok.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EntityListeners;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.Table;
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 import org.example.mercenary.domain.match.entity.MatchEntity;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
@@ -9,36 +25,41 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "applications") // 신청 내역 테이블
+@Table(name = "applications")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor
 @Builder
-@EntityListeners(AuditingEntityListener.class) // 생성 시간 자동 기록
+@EntityListeners(AuditingEntityListener.class)
 public class ApplicationEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // 어떤 경기에 신청했는지
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "match_id")
     private MatchEntity match;
 
-    // 누가 신청했는지 (UserEntity 연결 대신 ID만 저장해도 됨, 여기선 ID로)
     @Column(nullable = false)
     private Long userId;
 
     @Enumerated(EnumType.STRING)
-    private ApplicationStatus status; // 신청 상태 (READY, APPROVED, REJECTED 등)
+    private ApplicationStatus status;
 
     @CreatedDate
-    private LocalDateTime createdAt; // 신청 시간
+    private LocalDateTime createdAt;
 
-    // 생성 전 기본값
     @PrePersist
     public void prePersist() {
         this.status = (this.status == null) ? ApplicationStatus.READY : this.status;
+    }
+
+    public void approve() {
+        this.status = ApplicationStatus.APPROVED;
+    }
+
+    public void reject() {
+        this.status = ApplicationStatus.REJECTED;
     }
 }

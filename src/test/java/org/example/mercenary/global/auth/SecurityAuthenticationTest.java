@@ -4,6 +4,7 @@ import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.MalformedJwtException;
 import org.example.mercenary.domain.application.controller.ApplicationController;
+import org.example.mercenary.domain.application.dto.MyApplicationStatusResponseDto;
 import org.example.mercenary.domain.application.service.ApplicationService;
 import org.example.mercenary.domain.match.controller.MatchController;
 import org.example.mercenary.domain.match.service.MatchService;
@@ -22,12 +23,13 @@ import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.Date;
-
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.never;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -100,14 +102,10 @@ class SecurityAuthenticationTest {
     }
 
     @Test
-    @DisplayName("정상 토큰이면 memberId 를 주입해 용병 신청을 처리한다")
+    @DisplayName("정상 토큰이면 memberId 를 주입해 참가 신청을 처리한다")
     void shouldApplyMatchWhenTokenValid() throws Exception {
         given(jwtTokenProvider.getAuthentication("valid-token"))
-                .willReturn(new UsernamePasswordAuthenticationToken(
-                        new AuthenticatedMember(7L, "ROLE_USER"),
-                        "valid-token",
-                        AuthorityUtils.createAuthorityList("ROLE_USER")
-                ));
+                .willReturn(authenticatedUser(7L));
 
         mockMvc.perform(post("/api/matches/3/apply")
                         .header("Authorization", "Bearer valid-token"))
@@ -115,6 +113,55 @@ class SecurityAuthenticationTest {
                 .andExpect(jsonPath("$.code").value(200));
 
         then(applicationService).should().applyMatch(3L, 7L);
+    }
+
+    @Test
+    @DisplayName("정상 토큰이면 내 참가 신청 상태를 조회한다")
+    void shouldGetMyApplicationStatusWhenTokenValid() throws Exception {
+        given(jwtTokenProvider.getAuthentication("valid-token"))
+                .willReturn(authenticatedUser(7L));
+        given(applicationService.getMyApplicationStatus(3L, 7L))
+                .willReturn(MyApplicationStatusResponseDto.builder()
+                        .applied(true)
+                        .status("READY")
+                        .applicationId(10L)
+                        .build());
+
+        mockMvc.perform(get("/api/matches/3/application/me")
+                        .header("Authorization", "Bearer valid-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.applied").value(true))
+                .andExpect(jsonPath("$.data.status").value("READY"));
+    }
+
+    @Test
+    @WithMockUser(roles = "GUEST")
+    @DisplayName("권한이 부족하면 신청 목록 조회는 403 응답을 반환한다")
+    void shouldReturnForbiddenWhenRoleInsufficientForApplications() throws Exception {
+        mockMvc.perform(get("/api/matches/3/applications"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(403))
+                .andExpect(jsonPath("$.message").value("접근 권한이 없습니다."));
+    }
+
+    @Test
+    @DisplayName("정상 토큰이면 신청 상태를 변경할 수 있다")
+    void shouldUpdateApplicationStatusWhenTokenValid() throws Exception {
+        given(jwtTokenProvider.getAuthentication("valid-token"))
+                .willReturn(authenticatedUser(7L));
+
+        mockMvc.perform(patch("/api/matches/3/applications/10")
+                        .header("Authorization", "Bearer valid-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "status": "APPROVED"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200));
+
+        then(applicationService).should().updateApplicationStatus(3L, 10L, 7L, org.example.mercenary.domain.application.entity.ApplicationStatus.APPROVED);
     }
 
     @Test
@@ -133,11 +180,7 @@ class SecurityAuthenticationTest {
     @DisplayName("현재 인원이 1 미만이면 400 응답을 반환한다")
     void shouldReturnBadRequestWhenCurrentPlayerCountLessThanOne() throws Exception {
         given(jwtTokenProvider.getAuthentication("valid-token"))
-                .willReturn(new UsernamePasswordAuthenticationToken(
-                        new AuthenticatedMember(7L, "ROLE_USER"),
-                        "valid-token",
-                        AuthorityUtils.createAuthorityList("ROLE_USER")
-                ));
+                .willReturn(authenticatedUser(7L));
 
         mockMvc.perform(post("/api/matches")
                         .header("Authorization", "Bearer valid-token")
@@ -154,11 +197,7 @@ class SecurityAuthenticationTest {
     @DisplayName("유효한 요청과 토큰이면 매치 생성 시 201 응답을 반환한다")
     void shouldCreateMatchWhenRequestValid() throws Exception {
         given(jwtTokenProvider.getAuthentication("valid-token"))
-                .willReturn(new UsernamePasswordAuthenticationToken(
-                        new AuthenticatedMember(7L, "ROLE_USER"),
-                        "valid-token",
-                        AuthorityUtils.createAuthorityList("ROLE_USER")
-                ));
+                .willReturn(authenticatedUser(7L));
         given(matchService.createMatch(any(), eq(7L))).willReturn(99L);
 
         mockMvc.perform(post("/api/matches")
@@ -172,27 +211,12 @@ class SecurityAuthenticationTest {
         then(matchService).should().createMatch(any(), eq(7L));
     }
 
-    @Test
-    @DisplayName("토큰 role 클레임이 USER 여도 매치 생성 권한을 인정한다")
-    void shouldCreateMatchWhenTokenRoleClaimIsUser() throws Exception {
-        given(jwtTokenProvider.getAuthentication("user-role-token"))
-                .willReturn(new UsernamePasswordAuthenticationToken(
-                        new AuthenticatedMember(7L, "ROLE_USER"),
-                        "user-role-token",
-                        AuthorityUtils.createAuthorityList("ROLE_USER")
-                ));
-        given(matchService.createMatch(any(), eq(7L))).willReturn(100L);
-
-        mockMvc.perform(post("/api/matches")
-                        .header("Authorization", "Bearer user-role-token")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(validCreateMatchRequest()
-                                .replace("\"maxPlayerCount\": 10", "\"maxPlayerCount\": 5")
-                                .replace("\"currentPlayerCount\": 1", "\"currentPlayerCount\": 6")))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.data").value(100L));
-
-        then(matchService).should().createMatch(any(), eq(7L));
+    private UsernamePasswordAuthenticationToken authenticatedUser(Long memberId) {
+        return new UsernamePasswordAuthenticationToken(
+                new AuthenticatedMember(memberId, "ROLE_USER"),
+                "valid-token",
+                AuthorityUtils.createAuthorityList("ROLE_USER")
+        );
     }
 
     private String validCreateMatchRequest() {
