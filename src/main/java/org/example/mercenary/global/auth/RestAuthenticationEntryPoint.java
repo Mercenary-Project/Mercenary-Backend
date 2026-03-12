@@ -25,6 +25,7 @@ public class RestAuthenticationEntryPoint implements AuthenticationEntryPoint {
                          AuthenticationException authException) throws IOException {
         String errorCode = (String) request.getAttribute(JwtAuthenticationFilter.AUTH_EXCEPTION_ATTRIBUTE);
         String message = "인증이 필요합니다.";
+
         if (JwtAuthenticationFilter.TOKEN_EXPIRED.equals(errorCode)) {
             message = "만료된 토큰입니다.";
         } else if (JwtAuthenticationFilter.TOKEN_INVALID.equals(errorCode)) {

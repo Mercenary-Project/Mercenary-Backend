@@ -52,7 +52,7 @@ public class JwtTokenProvider {
                 .getBody();
 
         Long memberId = Long.parseLong(claims.getSubject());
-        String role = claims.get("role", String.class);
+        String role = normalizeRole(claims.get("role", String.class));
         AuthenticatedMember principal = new AuthenticatedMember(memberId, role);
 
         return new UsernamePasswordAuthenticationToken(
@@ -60,5 +60,12 @@ public class JwtTokenProvider {
                 token,
                 List.of(new SimpleGrantedAuthority(role))
         );
+    }
+
+    private String normalizeRole(String role) {
+        if (role == null || role.isBlank()) {
+            throw new IllegalArgumentException("권한 정보가 없는 토큰입니다.");
+        }
+        return role.startsWith("ROLE_") ? role : "ROLE_" + role;
     }
 }

@@ -33,8 +33,8 @@ public class MatchDetailResponseDto {
                 .placeName(match.getPlaceName())
                 .fullAddress(match.getFullAddress()) // Entity에 있는 필드 활용
                 .matchDate(match.getMatchDate().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))) // 날짜 예쁘게 변환
-                .maxPlayerCount(match.getMaxPlayerCount()) // ✅ 수정됨: getTotalHeadCount -> getMaxPlayerCount
-                .currentPlayerCount(match.getCurrentPlayerCount()) // ✅ 수정됨: Entity 값 그대로 사용
+                .maxPlayerCount(match.getMaxPlayerCount()) //
+                .currentPlayerCount(match.getCurrentPlayerCount()) //
                 .status(match.getStatus().name()) // Enum -> String 변환 (RECRUITING 등)
                 .writerName(match.getMember() != null ? match.getMember().getNickname() : "알 수 없음")
                 .build();

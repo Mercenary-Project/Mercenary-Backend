@@ -58,7 +58,7 @@ public class AuthService {
                 });
 
         // 4. 우리 서비스 전용 JWT 토큰 발급
-        return jwtTokenProvider.createToken(member.getId(), member.getRole().name());
+        return jwtTokenProvider.createToken(member.getId(), member.getRole().getKey());
     }
 
     private String getKakaoAccessToken(String code) {
