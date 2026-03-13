@@ -2,6 +2,8 @@ package org.example.mercenary.domain.member.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.example.mercenary.domain.member.dto.AuthTokenResponse;
+import org.example.mercenary.domain.member.dto.DevLoginRequest;
 import org.example.mercenary.domain.member.dto.KakaoTokenResponse;
 import org.example.mercenary.domain.member.dto.KakaoUserInfoResponse;
 import org.example.mercenary.domain.member.entity.MemberEntity;
@@ -59,6 +61,19 @@ public class AuthService {
 
         // 4. 우리 서비스 전용 JWT 토큰 발급
         return jwtTokenProvider.createToken(member.getId(), member.getRole().getKey());
+    }
+
+    public AuthTokenResponse devLogin(DevLoginRequest request) {
+        MemberEntity member = memberRepository.findByKakaoId(request.kakaoId())
+                .orElseGet(() -> memberRepository.save(MemberEntity.builder()
+                        .kakaoId(request.kakaoId())
+                        .email("dev-" + request.kakaoId() + "@local.test")
+                        .nickname(request.nickname())
+                        .role(Role.USER)
+                        .build()));
+
+        String accessToken = jwtTokenProvider.createToken(member.getId(), member.getRole().getKey());
+        return new AuthTokenResponse(accessToken, member.getId(), member.getNickname());
     }
 
     private String getKakaoAccessToken(String code) {

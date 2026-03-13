@@ -31,3 +31,6 @@ jwt:
 
 kakao:
   client-id: 7d14f9ab2e737ea77a60f2c1bffce860
+
+auth:
+  dev-login-enabled: true
