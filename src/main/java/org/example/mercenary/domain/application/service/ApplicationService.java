@@ -2,6 +2,7 @@ package org.example.mercenary.domain.application.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.example.mercenary.domain.application.dto.AppliedMatchResponseDto;
 import org.example.mercenary.domain.application.dto.ApplicationSummaryResponseDto;
 import org.example.mercenary.domain.application.dto.MyApplicationStatusResponseDto;
 import org.example.mercenary.domain.application.entity.ApplicationEntity;
@@ -46,6 +47,21 @@ public class ApplicationService {
         return applicationRepository.findByMatchAndUserId(match, userId)
                 .map(MyApplicationStatusResponseDto::from)
                 .orElseGet(MyApplicationStatusResponseDto::notApplied);
+    }
+
+    @Transactional(readOnly = true)
+    public List<AppliedMatchResponseDto> getAppliedMatches(Long userId) {
+        validateApplicant(userId);
+
+        return applicationRepository.findAppliedMatchesByUserId(userId).stream()
+                .map(AppliedMatchResponseDto::from)
+                .toList();
+    }
+
+    @Transactional
+    public void cancelApplication(Long matchId, Long userId) {
+        validateApplicant(userId);
+        executeWithMatchLock(matchId, () -> processApplicationCancellation(matchId, userId));
     }
 
     @Transactional(readOnly = true)
@@ -112,6 +128,18 @@ public class ApplicationService {
         }
 
         application.reject();
+    }
+
+    protected void processApplicationCancellation(Long matchId, Long userId) {
+        MatchEntity match = getMatch(matchId);
+        ApplicationEntity application = applicationRepository.findByMatchAndUserId(match, userId)
+                .orElseThrow(() -> new IllegalArgumentException("취소할 참가 신청을 찾을 수 없습니다."));
+
+        if (application.getStatus() != ApplicationStatus.READY) {
+            throw new IllegalStateException("대기 중인 참가 신청만 취소할 수 있습니다.");
+        }
+
+        application.cancel();
     }
 
     private void executeWithMatchLock(Long matchId, Runnable action) {

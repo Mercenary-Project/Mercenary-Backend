@@ -2,6 +2,7 @@ package org.example.mercenary.domain.application.controller;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.example.mercenary.domain.application.dto.AppliedMatchResponseDto;
 import org.example.mercenary.domain.application.dto.ApplicationDecisionRequestDto;
 import org.example.mercenary.domain.application.dto.ApplicationSummaryResponseDto;
 import org.example.mercenary.domain.application.dto.MyApplicationStatusResponseDto;
@@ -9,6 +10,7 @@ import org.example.mercenary.domain.application.service.ApplicationService;
 import org.example.mercenary.global.dto.ApiResponseDto;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -43,6 +45,25 @@ public class ApplicationController {
         return ResponseEntity.ok(ApiResponseDto.success(
                 "내 참가 신청 상태 조회 성공",
                 applicationService.getMyApplicationStatus(matchId, memberId)
+        ));
+    }
+
+    @DeleteMapping("/{matchId}/application/me")
+    public ResponseEntity<ApiResponseDto<String>> cancelMyApplication(
+            @PathVariable Long matchId,
+            @AuthenticationPrincipal(expression = "memberId") Long memberId
+    ) {
+        applicationService.cancelApplication(matchId, memberId);
+        return ResponseEntity.ok(ApiResponseDto.success("참가 신청이 취소되었습니다.", null));
+    }
+
+    @GetMapping("/applied")
+    public ResponseEntity<ApiResponseDto<List<AppliedMatchResponseDto>>> getAppliedMatches(
+            @AuthenticationPrincipal(expression = "memberId") Long memberId
+    ) {
+        return ResponseEntity.ok(ApiResponseDto.success(
+                "내가 신청한 매치 목록 조회 성공",
+                applicationService.getAppliedMatches(memberId)
         ));
     }
 

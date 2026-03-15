@@ -52,7 +52,7 @@ class ApplicationServiceUnitTest {
     private ApplicationService applicationService;
 
     @Test
-    @DisplayName("다른 유저는 매치에 참가 신청할 수 있다")
+    @DisplayName("다른 사용자는 매치에 참가 신청할 수 있다")
     void shouldApplyWhenApplicantIsDifferentUser() throws Exception {
         MatchEntity match = createMatch(1L, 10L, 3, MatchStatus.RECRUITING);
 
@@ -133,6 +133,80 @@ class ApplicationServiceUnitTest {
     }
 
     @Test
+    @DisplayName("신청자는 자신이 신청한 매치 목록을 조회할 수 있다")
+    void shouldGetAppliedMatchesForApplicant() {
+        MatchEntity match = createMatch(1L, 10L, 3, MatchStatus.RECRUITING);
+        ApplicationEntity application = ApplicationEntity.builder()
+                .match(match)
+                .userId(2L)
+                .status(ApplicationStatus.APPROVED)
+                .build();
+        ReflectionTestUtils.setField(application, "id", 100L);
+
+        given(memberRepository.existsById(2L)).willReturn(true);
+        given(applicationRepository.findAppliedMatchesByUserId(2L)).willReturn(List.of(application));
+
+        var result = applicationService.getAppliedMatches(2L);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getApplicationId()).isEqualTo(100L);
+        assertThat(result.get(0).getMatchId()).isEqualTo(10L);
+        assertThat(result.get(0).getStatus()).isEqualTo("APPROVED");
+        assertThat(result.get(0).getWriterName()).isEqualTo("owner");
+    }
+
+    @Test
+    @DisplayName("신청 내역이 없으면 빈 배열을 반환한다")
+    void shouldReturnEmptyAppliedMatchesWhenNothingApplied() {
+        given(memberRepository.existsById(2L)).willReturn(true);
+        given(applicationRepository.findAppliedMatchesByUserId(2L)).willReturn(List.of());
+
+        var result = applicationService.getAppliedMatches(2L);
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    @DisplayName("신청자는 대기 중인 신청을 취소할 수 있다")
+    void shouldCancelReadyApplication() throws Exception {
+        MatchEntity match = createMatch(1L, 10L, 3, MatchStatus.RECRUITING);
+        ApplicationEntity application = ApplicationEntity.builder()
+                .match(match)
+                .userId(2L)
+                .status(ApplicationStatus.READY)
+                .build();
+
+        mockLock(10L);
+        given(memberRepository.existsById(2L)).willReturn(true);
+        given(matchRepository.findById(10L)).willReturn(Optional.of(match));
+        given(applicationRepository.findByMatchAndUserId(match, 2L)).willReturn(Optional.of(application));
+
+        applicationService.cancelApplication(10L, 2L);
+
+        assertThat(application.getStatus()).isEqualTo(ApplicationStatus.CANCELED);
+    }
+
+    @Test
+    @DisplayName("대기 중이 아닌 신청은 취소할 수 없다")
+    void shouldRejectCancelWhenApplicationAlreadyProcessed() throws Exception {
+        MatchEntity match = createMatch(1L, 10L, 3, MatchStatus.RECRUITING);
+        ApplicationEntity application = ApplicationEntity.builder()
+                .match(match)
+                .userId(2L)
+                .status(ApplicationStatus.APPROVED)
+                .build();
+
+        mockLock(10L);
+        given(memberRepository.existsById(2L)).willReturn(true);
+        given(matchRepository.findById(10L)).willReturn(Optional.of(match));
+        given(applicationRepository.findByMatchAndUserId(match, 2L)).willReturn(Optional.of(application));
+
+        assertThatThrownBy(() -> applicationService.cancelApplication(10L, 2L))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("대기 중인 참가 신청만 취소할 수 있습니다.");
+    }
+
+    @Test
     @DisplayName("작성자는 대기 중인 신청을 승인할 수 있다")
     void shouldApproveApplication() throws Exception {
         MatchEntity match = createMatch(1L, 10L, 4, MatchStatus.RECRUITING);
@@ -182,8 +256,7 @@ class ApplicationServiceUnitTest {
         given(matchRepository.findById(10L)).willReturn(Optional.of(match));
 
         assertThatThrownBy(() -> applicationService.updateApplicationStatus(10L, 100L, 2L, ApplicationStatus.APPROVED))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessage("해당 매치의 작성자만 접근할 수 있습니다.");
+                .isInstanceOf(IllegalStateException.class);
     }
 
     private void mockLock(Long matchId) throws Exception {

@@ -62,4 +62,8 @@ public class ApplicationEntity {
     public void reject() {
         this.status = ApplicationStatus.REJECTED;
     }
+
+    public void cancel() {
+        this.status = ApplicationStatus.CANCELED;
+    }
 }
