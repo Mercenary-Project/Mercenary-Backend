@@ -28,7 +28,7 @@ public class AuthService {
     private final MemberRepository memberRepository;
     private final JwtTokenProvider jwtTokenProvider;
 
-    public String login(String code) {
+    public AuthTokenResponse login(String code) {
         // 1. 카카오로부터 Access Token 받기
         String accessToken = getKakaoAccessToken(code);
 
@@ -60,7 +60,8 @@ public class AuthService {
                 });
 
         // 4. 우리 서비스 전용 JWT 토큰 발급
-        return jwtTokenProvider.createToken(member.getId(), member.getRole().getKey());
+        String serviceAccessToken = jwtTokenProvider.createToken(member.getId(), member.getRole().getKey());
+        return new AuthTokenResponse(serviceAccessToken, member.getId(), member.getNickname());
     }
 
     public AuthTokenResponse devLogin(DevLoginRequest request) {

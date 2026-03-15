@@ -15,6 +15,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -127,6 +128,55 @@ class MatchServiceTest {
 
         assertThat(matchId).isEqualTo(88L);
         then(matchLocationService).should().addMatchLocation(88L, 127.0, 37.5);
+    }
+
+    @Test
+    @DisplayName("로그인 사용자가 작성한 매치 목록을 조회한다")
+    void shouldGetMyMatches() {
+        MatchEntity newerMatch = MatchEntity.builder()
+                .id(10L)
+                .title("later")
+                .content("content")
+                .placeName("place")
+                .district("district")
+                .fullAddress("address")
+                .latitude(37.5)
+                .longitude(127.0)
+                .matchDate(LocalDateTime.of(2030, 1, 2, 10, 0))
+                .maxPlayerCount(10)
+                .currentPlayerCount(3)
+                .build();
+        MatchEntity olderMatch = MatchEntity.builder()
+                .id(9L)
+                .title("earlier")
+                .content("content")
+                .placeName("place")
+                .district("district")
+                .fullAddress("address")
+                .latitude(37.5)
+                .longitude(127.0)
+                .matchDate(LocalDateTime.of(2030, 1, 1, 10, 0))
+                .maxPlayerCount(10)
+                .currentPlayerCount(2)
+                .build();
+
+        given(matchRepository.findAllByMemberIdOrderByMatchDateDesc(7L))
+                .willReturn(List.of(newerMatch, olderMatch));
+
+        var result = matchService.getMyMatches(7L);
+
+        assertThat(result).hasSize(2);
+        assertThat(result.get(0).getMatchId()).isEqualTo(10L);
+        assertThat(result.get(0).getTitle()).isEqualTo("later");
+        assertThat(result.get(1).getMatchId()).isEqualTo(9L);
+    }
+
+    @Test
+    @DisplayName("인증 정보가 없으면 내가 작성한 매치 목록을 조회할 수 없다")
+    void shouldRejectMyMatchesWithoutAuthenticatedMember() {
+        assertThatThrownBy(() -> matchService.getMyMatches(null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("인증된 사용자 정보를 찾을 수 없습니다.");
     }
 
     private MatchCreateRequestDto createRequest(int maxPlayerCount, int currentPlayerCount) {

@@ -135,6 +135,43 @@ class SecurityAuthenticationTest {
     }
 
     @Test
+    @DisplayName("정상 토큰이면 내가 작성한 매치 목록을 조회한다")
+    void shouldGetMyMatchesWhenTokenValid() throws Exception {
+        given(jwtTokenProvider.getAuthentication("valid-token"))
+                .willReturn(authenticatedUser(7L));
+        given(matchService.getMyMatches(7L))
+                .willReturn(java.util.List.of(
+                        org.example.mercenary.domain.match.dto.MatchSearchResponseDto.builder()
+                                .matchId(11L)
+                                .title("my match")
+                                .placeName("place")
+                                .content("content")
+                                .matchDate(java.time.LocalDateTime.of(2030, 1, 1, 10, 0))
+                                .currentPlayerCount(3)
+                                .maxPlayerCount(10)
+                                .build()
+                ));
+
+        mockMvc.perform(get("/api/matches/my")
+                        .header("Authorization", "Bearer valid-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].matchId").value(11L))
+                .andExpect(jsonPath("$.data[0].title").value("my match"));
+
+        then(matchService).should().getMyMatches(7L);
+    }
+
+    @Test
+    @DisplayName("토큰이 없으면 내가 작성한 매치 목록 조회는 401을 반환한다")
+    void shouldReturnUnauthorizedWhenGetMyMatchesTokenMissing() throws Exception {
+        mockMvc.perform(get("/api/matches/my"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value(401));
+
+        then(matchService).should(never()).getMyMatches(any());
+    }
+
+    @Test
     @WithMockUser(roles = "GUEST")
     @DisplayName("권한이 부족하면 신청 목록 조회는 403 응답을 반환한다")
     void shouldReturnForbiddenWhenRoleInsufficientForApplications() throws Exception {

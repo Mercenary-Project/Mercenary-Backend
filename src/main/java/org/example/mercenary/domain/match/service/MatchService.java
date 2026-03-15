@@ -73,6 +73,17 @@ public class MatchService {
     }
 
     @Transactional(readOnly = true)
+    public List<MatchSearchResponseDto> getMyMatches(Long memberId) {
+        if (memberId == null) {
+            throw new IllegalArgumentException("인증된 사용자 정보를 찾을 수 없습니다.");
+        }
+
+        return matchRepository.findAllByMemberIdOrderByMatchDateDesc(memberId).stream()
+                .map(match -> MatchSearchResponseDto.from(match, 0.0))
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
     public MatchDetailResponseDto getMatchDetail(Long matchId) {
         MatchEntity match = matchRepository.findById(matchId)
                 .orElseThrow(() -> new IllegalArgumentException("해당 매치를 찾을 수 없습니다. id=" + matchId));

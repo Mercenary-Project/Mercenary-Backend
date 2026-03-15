@@ -49,6 +49,14 @@ public class MatchController {
         return ResponseEntity.ok(ApiResponseDto.success("전체 매치 조회 성공", results));
     }
 
+    @GetMapping("/my")
+    public ResponseEntity<ApiResponseDto<List<MatchSearchResponseDto>>> getMyMatches(
+            @AuthenticationPrincipal(expression = "memberId") Long memberId
+    ) {
+        List<MatchSearchResponseDto> results = matchService.getMyMatches(memberId);
+        return ResponseEntity.ok(ApiResponseDto.success("내가 작성한 매치 조회 성공", results));
+    }
+
     @GetMapping("/nearby")
     public ResponseEntity<?> searchNearbyMatches(@Valid @ModelAttribute MatchSearchRequestDto request,
                                                  BindingResult bindingResult) {

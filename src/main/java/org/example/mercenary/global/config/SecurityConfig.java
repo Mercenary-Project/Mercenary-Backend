@@ -40,6 +40,7 @@ public class SecurityConfig {
                 )
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**", "/login/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/matches/my").hasRole("USER")
                         .requestMatchers(HttpMethod.GET, "/api/matches/*/application/me").hasRole("USER")
                         .requestMatchers(HttpMethod.GET, "/api/matches/*/applications").hasRole("USER")
                         .requestMatchers(HttpMethod.GET, "/api/matches/**").permitAll()
