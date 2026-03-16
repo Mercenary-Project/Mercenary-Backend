@@ -7,14 +7,17 @@ import org.example.mercenary.domain.match.dto.MatchCreateRequestDto;
 import org.example.mercenary.domain.match.dto.MatchDetailResponseDto;
 import org.example.mercenary.domain.match.dto.MatchSearchRequestDto;
 import org.example.mercenary.domain.match.dto.MatchSearchResponseDto;
+import org.example.mercenary.domain.match.dto.MatchUpdateRequestDto;
 import org.example.mercenary.domain.match.service.MatchService;
 import org.example.mercenary.global.dto.ApiResponseDto;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.BindingResult;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -65,7 +68,7 @@ public class MatchController {
             return ResponseEntity.badRequest().body(bindingResult.getAllErrors());
         }
 
-        log.info("검색 요청 들어옴! 위도={}, 경도={}, 거리={}",
+        log.info("검색 요청 들어옴: 위도={}, 경도={}, 거리={}",
                 request.getLatitude(), request.getLongitude(), request.getDistance());
 
         List<MatchSearchResponseDto> results = matchService.searchNearbyMatches(request);
@@ -76,5 +79,24 @@ public class MatchController {
     public ResponseEntity<ApiResponseDto<MatchDetailResponseDto>> getMatchDetail(@PathVariable Long matchId) {
         MatchDetailResponseDto response = matchService.getMatchDetail(matchId);
         return ResponseEntity.ok(ApiResponseDto.success("매치 상세 조회 성공", response));
+    }
+
+    @PatchMapping("/{matchId}")
+    public ResponseEntity<ApiResponseDto<String>> updateMatch(
+            @PathVariable Long matchId,
+            @Valid @RequestBody MatchUpdateRequestDto request,
+            @AuthenticationPrincipal(expression = "memberId") Long memberId
+    ) {
+        matchService.updateMatch(matchId, request, memberId);
+        return ResponseEntity.ok(ApiResponseDto.success("매치가 성공적으로 수정되었습니다.", null));
+    }
+
+    @DeleteMapping("/{matchId}")
+    public ResponseEntity<ApiResponseDto<String>> deleteMatch(
+            @PathVariable Long matchId,
+            @AuthenticationPrincipal(expression = "memberId") Long memberId
+    ) {
+        matchService.deleteMatch(matchId, memberId);
+        return ResponseEntity.ok(ApiResponseDto.success("매치가 성공적으로 삭제되었습니다.", null));
     }
 }

@@ -17,6 +17,8 @@ public interface ApplicationRepository extends JpaRepository<ApplicationEntity, 
 
     List<ApplicationEntity> findAllByMatchOrderByCreatedAtAsc(MatchEntity match);
 
+    void deleteAllByMatch(MatchEntity match);
+
     Optional<ApplicationEntity> findByIdAndMatch(Long applicationId, MatchEntity match);
 
     @Query("""

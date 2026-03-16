@@ -35,6 +35,14 @@ public class MatchLocationService {
      * 2. 내 주변 경기 검색 (Reader: 용병)
      * 내 위치 기준 반경 N km 이내의 matchId들을 0.01초 만에 가져옵니다.
      */
+    public void updateMatchLocation(Long matchId, double longitude, double latitude) {
+        addMatchLocation(matchId, longitude, latitude);
+    }
+
+    public void deleteMatchLocation(Long matchId) {
+        redisTemplate.opsForGeo().remove(GEO_KEY, matchId.toString());
+    }
+
     public Map<Long, Double> findNearbyMatchIds(double longitude, double latitude, double kmDistance) {
 
         // 거리 정보 포함 옵션

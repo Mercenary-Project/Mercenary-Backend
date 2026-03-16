@@ -34,10 +34,10 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.never;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -78,7 +78,7 @@ class SecurityAuthenticationTest {
     }
 
     @Test
-    @DisplayName("만료된 토큰이면 참가 신청은 401을 반환한다")
+    @DisplayName("만료된 토큰이면 지원 요청은 401을 반환한다")
     void shouldReturnUnauthorizedWhenTokenExpired() throws Exception {
         given(jwtTokenProvider.getAuthentication("expired-token"))
                 .willThrow(new ExpiredJwtException(
@@ -94,7 +94,7 @@ class SecurityAuthenticationTest {
     }
 
     @Test
-    @DisplayName("유효하지 않은 토큰이면 참가 신청은 401을 반환한다")
+    @DisplayName("유효하지 않은 토큰이면 지원 요청은 401을 반환한다")
     void shouldReturnUnauthorizedWhenTokenInvalid() throws Exception {
         given(jwtTokenProvider.getAuthentication("invalid-token"))
                 .willThrow(new MalformedJwtException("invalid"));
@@ -106,7 +106,7 @@ class SecurityAuthenticationTest {
     }
 
     @Test
-    @DisplayName("정상 토큰이면 참가 신청을 처리한다")
+    @DisplayName("정상 토큰이면 지원 요청을 처리한다")
     void shouldApplyMatchWhenTokenValid() throws Exception {
         given(jwtTokenProvider.getAuthentication("valid-token"))
                 .willReturn(authenticatedUser(7L));
@@ -120,7 +120,7 @@ class SecurityAuthenticationTest {
     }
 
     @Test
-    @DisplayName("정상 토큰이면 내 신청 상태를 조회한다")
+    @DisplayName("정상 토큰이면 내 지원 상태를 조회한다")
     void shouldGetMyApplicationStatusWhenTokenValid() throws Exception {
         given(jwtTokenProvider.getAuthentication("valid-token"))
                 .willReturn(authenticatedUser(7L));
@@ -139,7 +139,7 @@ class SecurityAuthenticationTest {
     }
 
     @Test
-    @DisplayName("정상 토큰이면 참가 신청을 취소할 수 있다")
+    @DisplayName("정상 토큰이면 지원 요청 취소가 가능하다")
     void shouldCancelMyApplicationWhenTokenValid() throws Exception {
         given(jwtTokenProvider.getAuthentication("valid-token"))
                 .willReturn(authenticatedUser(7L));
@@ -153,7 +153,7 @@ class SecurityAuthenticationTest {
     }
 
     @Test
-    @DisplayName("토큰이 없으면 신청 취소는 401을 반환한다")
+    @DisplayName("토큰이 없으면 지원 취소는 401을 반환한다")
     void shouldReturnUnauthorizedWhenCancelMyApplicationTokenMissing() throws Exception {
         mockMvc.perform(delete("/api/matches/3/application/me"))
                 .andExpect(status().isUnauthorized())
@@ -163,7 +163,7 @@ class SecurityAuthenticationTest {
     }
 
     @Test
-    @DisplayName("정상 토큰이면 내가 신청한 매치 목록을 조회한다")
+    @DisplayName("정상 토큰이면 내가 지원한 매치 목록을 조회한다")
     void shouldGetAppliedMatchesWhenTokenValid() throws Exception {
         given(jwtTokenProvider.getAuthentication("valid-token"))
                 .willReturn(authenticatedUser(7L));
@@ -191,7 +191,7 @@ class SecurityAuthenticationTest {
     }
 
     @Test
-    @DisplayName("토큰이 없으면 내가 신청한 매치 목록 조회는 401을 반환한다")
+    @DisplayName("토큰이 없으면 내가 지원한 매치 목록 조회는 401을 반환한다")
     void shouldReturnUnauthorizedWhenGetAppliedMatchesTokenMissing() throws Exception {
         mockMvc.perform(get("/api/matches/applied"))
                 .andExpect(status().isUnauthorized())
@@ -311,6 +311,36 @@ class SecurityAuthenticationTest {
         then(matchService).should().createMatch(any(), eq(7L));
     }
 
+    @Test
+    @DisplayName("정상 토큰이면 매치를 수정할 수 있다")
+    void shouldUpdateMatchWhenTokenValid() throws Exception {
+        given(jwtTokenProvider.getAuthentication("valid-token"))
+                .willReturn(authenticatedUser(7L));
+
+        mockMvc.perform(patch("/api/matches/9")
+                        .header("Authorization", "Bearer valid-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validUpdateMatchRequest()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200));
+
+        then(matchService).should().updateMatch(eq(9L), any(), eq(7L));
+    }
+
+    @Test
+    @DisplayName("정상 토큰이면 매치를 삭제할 수 있다")
+    void shouldDeleteMatchWhenTokenValid() throws Exception {
+        given(jwtTokenProvider.getAuthentication("valid-token"))
+                .willReturn(authenticatedUser(7L));
+
+        mockMvc.perform(delete("/api/matches/9")
+                        .header("Authorization", "Bearer valid-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200));
+
+        then(matchService).should().deleteMatch(9L, 7L);
+    }
+
     private UsernamePasswordAuthenticationToken authenticatedUser(Long memberId) {
         return new UsernamePasswordAuthenticationToken(
                 new AuthenticatedMember(memberId, "ROLE_USER"),
@@ -332,6 +362,23 @@ class SecurityAuthenticationTest {
                   "matchDate": "2030-01-01T10:00",
                   "maxPlayerCount": 10,
                   "currentPlayerCount": 1
+                }
+                """;
+    }
+
+    private String validUpdateMatchRequest() {
+        return """
+                {
+                  "title": "updated",
+                  "content": "updated content",
+                  "placeName": "updated place",
+                  "district": "updated district",
+                  "fullAddress": "updated address",
+                  "latitude": 36.5,
+                  "longitude": 128.0,
+                  "matchDate": "2030-01-02T10:00",
+                  "maxPlayerCount": 12,
+                  "currentPlayerCount": 4
                 }
                 """;
     }

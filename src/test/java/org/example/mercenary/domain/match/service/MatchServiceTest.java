@@ -1,6 +1,8 @@
 package org.example.mercenary.domain.match.service;
 
+import org.example.mercenary.domain.application.repository.ApplicationRepository;
 import org.example.mercenary.domain.match.dto.MatchCreateRequestDto;
+import org.example.mercenary.domain.match.dto.MatchUpdateRequestDto;
 import org.example.mercenary.domain.match.entity.MatchEntity;
 import org.example.mercenary.domain.match.repository.MatchRepository;
 import org.example.mercenary.domain.member.entity.MemberEntity;
@@ -13,6 +15,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -36,11 +39,14 @@ class MatchServiceTest {
     @Mock
     private MemberRepository memberRepository;
 
+    @Mock
+    private ApplicationRepository applicationRepository;
+
     @InjectMocks
     private MatchService matchService;
 
     @Test
-    @DisplayName("현재 인원이 1 미만이면 서비스 계층에서 거절한다")
+    @DisplayName("현재 인원이 1 미만이면 예외가 발생한다")
     void shouldRejectWhenCurrentPlayerCountLessThanOne() {
         MatchCreateRequestDto request = createRequest(10, 0);
 
@@ -56,30 +62,13 @@ class MatchServiceTest {
     @DisplayName("유효한 요청이면 매치를 저장하고 위치 정보를 등록한다")
     void shouldCreateMatchWhenRequestValid() {
         MatchCreateRequestDto request = createRequest(10, 1);
-        MemberEntity member = MemberEntity.builder()
-                .kakaoId(123L)
-                .email("tester@example.com")
-                .nickname("tester")
-                .role(Role.USER)
-                .build();
+        MemberEntity member = createMember(1L);
 
         given(memberRepository.findById(1L)).willReturn(Optional.of(member));
         given(matchRepository.save(any(MatchEntity.class))).willAnswer(invocation -> {
             MatchEntity entity = invocation.getArgument(0);
-            return MatchEntity.builder()
-                    .id(77L)
-                    .member(entity.getMember())
-                    .title(entity.getTitle())
-                    .content(entity.getContent())
-                    .placeName(entity.getPlaceName())
-                    .district(entity.getDistrict())
-                    .matchDate(entity.getMatchDate())
-                    .maxPlayerCount(entity.getMaxPlayerCount())
-                    .currentPlayerCount(entity.getCurrentPlayerCount())
-                    .latitude(entity.getLatitude())
-                    .longitude(entity.getLongitude())
-                    .fullAddress(entity.getFullAddress())
-                    .build();
+            ReflectionTestUtils.setField(entity, "id", 77L);
+            return entity;
         });
 
         Long matchId = matchService.createMatch(request, 1L);
@@ -95,43 +84,17 @@ class MatchServiceTest {
     }
 
     @Test
-    @DisplayName("현재 인원이 모집 인원보다 커도 매치 생성을 허용한다")
-    void shouldCreateMatchWhenCurrentPlayerCountExceedsMax() {
+    @DisplayName("현재 인원이 최대 인원보다 크면 예외가 발생한다")
+    void shouldRejectWhenCurrentPlayerCountExceedsMax() {
         MatchCreateRequestDto request = createRequest(5, 6);
-        MemberEntity member = MemberEntity.builder()
-                .kakaoId(123L)
-                .email("tester2@example.com")
-                .nickname("tester2")
-                .role(Role.USER)
-                .build();
 
-        given(memberRepository.findById(1L)).willReturn(Optional.of(member));
-        given(matchRepository.save(any(MatchEntity.class))).willAnswer(invocation -> {
-            MatchEntity entity = invocation.getArgument(0);
-            return MatchEntity.builder()
-                    .id(88L)
-                    .member(entity.getMember())
-                    .title(entity.getTitle())
-                    .content(entity.getContent())
-                    .placeName(entity.getPlaceName())
-                    .district(entity.getDistrict())
-                    .matchDate(entity.getMatchDate())
-                    .maxPlayerCount(entity.getMaxPlayerCount())
-                    .currentPlayerCount(entity.getCurrentPlayerCount())
-                    .latitude(entity.getLatitude())
-                    .longitude(entity.getLongitude())
-                    .fullAddress(entity.getFullAddress())
-                    .build();
-        });
-
-        Long matchId = matchService.createMatch(request, 1L);
-
-        assertThat(matchId).isEqualTo(88L);
-        then(matchLocationService).should().addMatchLocation(88L, 127.0, 37.5);
+        assertThatThrownBy(() -> matchService.createMatch(request, 1L))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("현재 인원은 최대 인원보다 클 수 없습니다.");
     }
 
     @Test
-    @DisplayName("로그인 사용자가 작성한 매치 목록을 조회한다")
+    @DisplayName("로그인 사용자는 내가 작성한 매치 목록을 조회할 수 있다")
     void shouldGetMyMatches() {
         MatchEntity newerMatch = MatchEntity.builder()
                 .id(10L)
@@ -172,11 +135,52 @@ class MatchServiceTest {
     }
 
     @Test
-    @DisplayName("인증 정보가 없으면 내가 작성한 매치 목록을 조회할 수 없다")
+    @DisplayName("인증 정보가 없으면 내 매치 목록을 조회할 수 없다")
     void shouldRejectMyMatchesWithoutAuthenticatedMember() {
         assertThatThrownBy(() -> matchService.getMyMatches(null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("인증된 사용자 정보를 찾을 수 없습니다.");
+    }
+
+    @Test
+    @DisplayName("작성자는 매치를 수정할 수 있다")
+    void shouldUpdateOwnedMatch() {
+        MemberEntity member = createMember(1L);
+        MatchEntity match = createMatch(20L, member);
+        given(matchRepository.findById(20L)).willReturn(Optional.of(match));
+
+        matchService.updateMatch(20L, createUpdateRequest(12, 4), 1L);
+
+        assertThat(match.getTitle()).isEqualTo("updated match");
+        assertThat(match.getCurrentPlayerCount()).isEqualTo(4);
+        assertThat(match.getMaxPlayerCount()).isEqualTo(12);
+        then(matchLocationService).should().updateMatchLocation(20L, 128.0, 36.5);
+    }
+
+    @Test
+    @DisplayName("작성자는 매치를 삭제할 수 있다")
+    void shouldDeleteOwnedMatch() {
+        MemberEntity member = createMember(1L);
+        MatchEntity match = createMatch(30L, member);
+        given(matchRepository.findById(30L)).willReturn(Optional.of(match));
+
+        matchService.deleteMatch(30L, 1L);
+
+        then(applicationRepository).should().deleteAllByMatch(match);
+        then(matchRepository).should().delete(match);
+        then(matchLocationService).should().deleteMatchLocation(30L);
+    }
+
+    @Test
+    @DisplayName("작성자가 아니면 매치를 수정할 수 없다")
+    void shouldRejectMatchUpdateWhenNotOwner() {
+        MemberEntity owner = createMember(1L);
+        MatchEntity match = createMatch(40L, owner);
+        given(matchRepository.findById(40L)).willReturn(Optional.of(match));
+
+        assertThatThrownBy(() -> matchService.updateMatch(40L, createUpdateRequest(12, 4), 999L))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("매치 작성자만 수정과 삭제를 할 수 있습니다.");
     }
 
     private MatchCreateRequestDto createRequest(int maxPlayerCount, int currentPlayerCount) {
@@ -192,5 +196,48 @@ class MatchServiceTest {
         request.setMaxPlayerCount(maxPlayerCount);
         request.setCurrentPlayerCount(currentPlayerCount);
         return request;
+    }
+
+    private MatchUpdateRequestDto createUpdateRequest(int maxPlayerCount, int currentPlayerCount) {
+        MatchUpdateRequestDto request = new MatchUpdateRequestDto();
+        request.setTitle("updated match");
+        request.setContent("updated content");
+        request.setPlaceName("updated place");
+        request.setDistrict("updated district");
+        request.setFullAddress("updated address");
+        request.setLatitude(36.5);
+        request.setLongitude(128.0);
+        request.setMatchDate(LocalDateTime.of(2031, 1, 1, 10, 0));
+        request.setMaxPlayerCount(maxPlayerCount);
+        request.setCurrentPlayerCount(currentPlayerCount);
+        return request;
+    }
+
+    private MemberEntity createMember(Long id) {
+        MemberEntity member = MemberEntity.builder()
+                .kakaoId(123L + id)
+                .email("tester" + id + "@example.com")
+                .nickname("tester" + id)
+                .role(Role.USER)
+                .build();
+        ReflectionTestUtils.setField(member, "id", id);
+        return member;
+    }
+
+    private MatchEntity createMatch(Long matchId, MemberEntity member) {
+        return MatchEntity.builder()
+                .id(matchId)
+                .member(member)
+                .title("old")
+                .content("old content")
+                .placeName("old place")
+                .district("old district")
+                .fullAddress("old address")
+                .latitude(37.5)
+                .longitude(127.0)
+                .matchDate(LocalDateTime.of(2030, 1, 1, 10, 0))
+                .maxPlayerCount(10)
+                .currentPlayerCount(3)
+                .build();
     }
 }

@@ -20,6 +20,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.example.mercenary.domain.match.dto.MatchCreateRequestDto;
+import org.example.mercenary.domain.match.dto.MatchUpdateRequestDto;
 import org.example.mercenary.domain.member.entity.MemberEntity;
 
 import java.time.LocalDateTime;
@@ -100,5 +101,21 @@ public class MatchEntity {
         if (this.currentPlayerCount >= this.maxPlayerCount) {
             this.status = MatchStatus.CLOSED;
         }
+    }
+
+    public void update(MatchUpdateRequestDto request) {
+        this.title = request.getTitle();
+        this.content = request.getContent();
+        this.placeName = request.getPlaceName();
+        this.district = request.getDistrict();
+        this.matchDate = request.getMatchDate();
+        this.maxPlayerCount = request.getMaxPlayerCount();
+        this.currentPlayerCount = request.getCurrentPlayerCount();
+        this.latitude = request.getLatitude();
+        this.longitude = request.getLongitude();
+        this.fullAddress = request.getFullAddress();
+        this.status = this.currentPlayerCount >= this.maxPlayerCount
+                ? MatchStatus.CLOSED
+                : MatchStatus.RECRUITING;
     }
 }
