@@ -1,0 +1,62 @@
+version: "3.8"
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: mercenary-backend:latest
+    restart: always
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_URL: jdbc:mysql://mysql:3306/mercenary?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+      DB_USERNAME: mercenary
+      DB_PASSWORD: mercenary
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: change-this-to-a-long-random-secret
+      KAKAO_CLIENT_ID: your-kakao-client-id
+      KAKAO_REDIRECT_URI: https://your-frontend-domain/login/callback
+      APP_CORS_ALLOWED_ORIGINS: https://your-frontend-domain
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  mysql:
+    image: mysql:8.0
+    restart: always
+    environment:
+      MYSQL_DATABASE: mercenary
+      MYSQL_USER: mercenary
+      MYSQL_PASSWORD: mercenary
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+volumes:
+  mysql_data:
+  redis_data:

@@ -25,6 +25,9 @@ public class AuthService {
     @Value("${kakao.client-id}")
     private String clientId;
 
+    @Value("${kakao.redirect-uri}")
+    private String redirectUri;
+
     private final MemberRepository memberRepository;
     private final JwtTokenProvider jwtTokenProvider;
 
@@ -82,7 +85,7 @@ public class AuthService {
         MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
         params.add("grant_type", "authorization_code");
         params.add("client_id", clientId);
-        params.add("redirect_uri", "http://localhost:5173/login/callback");
+        params.add("redirect_uri", redirectUri);
         params.add("code", code);
         // params.add("client_secret", "사용중이라면_여기에_키입력");
 
