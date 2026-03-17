@@ -46,10 +46,18 @@ Main differences in `prod`:
 - `dev-login` disabled
 - DB/Redis/JWT/Kakao values must come from environment variables
 
-Build and run with Docker Compose:
+Create an env file first:
 
 ```bash
-docker compose -f docker-compose.prod.yml up -d --build
+cp .env.prod.example .env.prod
+```
+
+Fill in the real production values in `.env.prod`, then build and run with Docker Compose:
+
+```bash
+docker stop my-mysql my-redis
+docker rm my-mysql my-redis
+docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
 ```
 
 Health check:
