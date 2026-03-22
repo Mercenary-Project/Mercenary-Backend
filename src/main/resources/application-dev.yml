@@ -1,8 +1,8 @@
 spring:
   datasource:
     url: ${DB_URL:jdbc:mysql://localhost:3307/mercenary?serverTimezone=Asia/Seoul&characterEncoding=UTF-8}
-    username: ${DB_USERNAME:root}
-    password: ${DB_PASSWORD:root}
+    username: ${DB_USERNAME:mercenary}
+    password: ${DB_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
 
   jpa:
@@ -10,6 +10,7 @@ spring:
       ddl-auto: update
     properties:
       hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
         format_sql: true
         show_sql: true
 
@@ -19,10 +20,10 @@ spring:
       port: ${REDIS_PORT:6379}
 
 jwt:
-  secret: ${JWT_SECRET:mercenary_high_project_secret_key_for_jwt_2025_fighting}
+  secret: ${JWT_SECRET}
 
 kakao:
-  client-id: ${KAKAO_CLIENT_ID:7d14f9ab2e737ea77a60f2c1bffce860}
+  client-id: ${KAKAO_CLIENT_ID}
   redirect-uri: ${KAKAO_REDIRECT_URI:http://localhost:5173/login/callback}
 
 auth:

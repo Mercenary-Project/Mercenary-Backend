@@ -37,6 +37,7 @@ out/
 .vscode/
 
 .env.prod
+.gradle-user/
 .gradle-home/
 
 codex_rq.md
