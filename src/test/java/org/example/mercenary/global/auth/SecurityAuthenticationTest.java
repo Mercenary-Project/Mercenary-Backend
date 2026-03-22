@@ -12,6 +12,7 @@ import org.example.mercenary.domain.match.controller.MatchController;
 import org.example.mercenary.domain.match.dto.MatchSearchResponseDto;
 import org.example.mercenary.domain.match.service.MatchService;
 import org.example.mercenary.global.config.SecurityConfig;
+import org.example.mercenary.global.config.TimeConfig;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -44,6 +45,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest(controllers = {MatchController.class, ApplicationController.class})
 @Import({
         SecurityConfig.class,
+        TimeConfig.class,
         JwtAuthenticationFilter.class,
         RestAuthenticationEntryPoint.class,
         RestAccessDeniedHandler.class
@@ -72,7 +74,8 @@ class SecurityAuthenticationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(validCreateMatchRequest()))
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.code").value(401));
+                .andExpect(jsonPath("$.code").value("TOKEN_MISSING"))
+                .andExpect(jsonPath("$.message").value("인증 토큰이 없습니다."));
 
         then(matchService).should(never()).createMatch(any(), any());
     }
@@ -90,7 +93,8 @@ class SecurityAuthenticationTest {
         mockMvc.perform(post("/api/matches/1/apply")
                         .header("Authorization", "Bearer expired-token"))
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.code").value(401));
+                .andExpect(jsonPath("$.code").value("TOKEN_EXPIRED"))
+                .andExpect(jsonPath("$.message").value("만료된 토큰입니다."));
     }
 
     @Test
@@ -102,7 +106,8 @@ class SecurityAuthenticationTest {
         mockMvc.perform(post("/api/matches/1/apply")
                         .header("Authorization", "Bearer invalid-token"))
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.code").value(401));
+                .andExpect(jsonPath("$.code").value("TOKEN_INVALID"))
+                .andExpect(jsonPath("$.message").value("유효하지 않은 토큰입니다."));
     }
 
     @Test
@@ -157,7 +162,8 @@ class SecurityAuthenticationTest {
     void shouldReturnUnauthorizedWhenCancelMyApplicationTokenMissing() throws Exception {
         mockMvc.perform(delete("/api/matches/3/application/me"))
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.code").value(401));
+                .andExpect(jsonPath("$.code").value("TOKEN_MISSING"))
+                .andExpect(jsonPath("$.message").value("인증 토큰이 없습니다."));
 
         then(applicationService).should(never()).cancelApplication(any(), any());
     }
@@ -195,7 +201,8 @@ class SecurityAuthenticationTest {
     void shouldReturnUnauthorizedWhenGetAppliedMatchesTokenMissing() throws Exception {
         mockMvc.perform(get("/api/matches/applied"))
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.code").value(401));
+                .andExpect(jsonPath("$.code").value("TOKEN_MISSING"))
+                .andExpect(jsonPath("$.message").value("인증 토큰이 없습니다."));
 
         then(applicationService).should(never()).getAppliedMatches(any());
     }
@@ -232,7 +239,8 @@ class SecurityAuthenticationTest {
     void shouldReturnUnauthorizedWhenGetMyMatchesTokenMissing() throws Exception {
         mockMvc.perform(get("/api/matches/my"))
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.code").value(401));
+                .andExpect(jsonPath("$.code").value("TOKEN_MISSING"))
+                .andExpect(jsonPath("$.message").value("인증 토큰이 없습니다."));
 
         then(matchService).should(never()).getMyMatches(any());
     }

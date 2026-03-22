@@ -23,7 +23,7 @@ public class JwtTokenProvider {
     private String secretKey;
 
     private Key key;
-    private final long tokenValidityInMilliseconds = 1000L * 60 * 60 * 24;
+    private final long tokenValidityInMilliseconds = 1000L * 60 * 60;
 
     @PostConstruct
     protected void init() {

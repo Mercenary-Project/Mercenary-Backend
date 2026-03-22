@@ -20,6 +20,7 @@ import java.io.IOException;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     public static final String AUTH_EXCEPTION_ATTRIBUTE = "auth.exception";
+    public static final String TOKEN_MISSING = "TOKEN_MISSING";
     public static final String TOKEN_EXPIRED = "TOKEN_EXPIRED";
     public static final String TOKEN_INVALID = "TOKEN_INVALID";
 
