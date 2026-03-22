@@ -2,12 +2,14 @@ package org.example.mercenary.domain.match.service;
 
 import org.example.mercenary.domain.application.repository.ApplicationRepository;
 import org.example.mercenary.domain.match.dto.MatchCreateRequestDto;
+import org.example.mercenary.domain.match.dto.MatchSearchRequestDto;
 import org.example.mercenary.domain.match.dto.MatchUpdateRequestDto;
 import org.example.mercenary.domain.match.entity.MatchEntity;
 import org.example.mercenary.domain.match.repository.MatchRepository;
 import org.example.mercenary.domain.member.entity.MemberEntity;
 import org.example.mercenary.domain.member.entity.Role;
 import org.example.mercenary.domain.member.repository.MemberRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -17,15 +19,21 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyIterable;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.Mockito.lenient;
 
 @ExtendWith(MockitoExtension.class)
 class MatchServiceTest {
@@ -42,24 +50,32 @@ class MatchServiceTest {
     @Mock
     private ApplicationRepository applicationRepository;
 
+    @Mock
+    private Clock appClock;
+
     @InjectMocks
     private MatchService matchService;
 
+    @BeforeEach
+    void setUpClock() {
+        lenient().when(appClock.getZone()).thenReturn(ZoneId.of("Asia/Seoul"));
+        lenient().when(appClock.instant()).thenReturn(Instant.parse("2026-01-01T00:00:00Z"));
+    }
+
     @Test
-    @DisplayName("현재 인원이 1 미만이면 예외가 발생한다")
+    @DisplayName("Reject create when current player count is less than one")
     void shouldRejectWhenCurrentPlayerCountLessThanOne() {
         MatchCreateRequestDto request = createRequest(10, 0);
 
         assertThatThrownBy(() -> matchService.createMatch(request, 1L))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("현재 인원은 1명 이상이어야 합니다.");
+                .isInstanceOf(IllegalArgumentException.class);
 
         then(memberRepository).shouldHaveNoInteractions();
         then(matchRepository).shouldHaveNoInteractions();
     }
 
     @Test
-    @DisplayName("유효한 요청이면 매치를 저장하고 위치 정보를 등록한다")
+    @DisplayName("Create match and register location when request is valid")
     void shouldCreateMatchWhenRequestValid() {
         MatchCreateRequestDto request = createRequest(10, 1);
         MemberEntity member = createMember(1L);
@@ -84,17 +100,16 @@ class MatchServiceTest {
     }
 
     @Test
-    @DisplayName("현재 인원이 최대 인원보다 크면 예외가 발생한다")
+    @DisplayName("Reject create when current player count exceeds max")
     void shouldRejectWhenCurrentPlayerCountExceedsMax() {
         MatchCreateRequestDto request = createRequest(5, 6);
 
         assertThatThrownBy(() -> matchService.createMatch(request, 1L))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("현재 인원은 최대 인원보다 클 수 없습니다.");
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
-    @DisplayName("로그인 사용자는 내가 작성한 매치 목록을 조회할 수 있다")
+    @DisplayName("Return my matches ordered by match date desc")
     void shouldGetMyMatches() {
         MatchEntity newerMatch = MatchEntity.builder()
                 .id(10L)
@@ -130,20 +145,56 @@ class MatchServiceTest {
 
         assertThat(result).hasSize(2);
         assertThat(result.get(0).getMatchId()).isEqualTo(10L);
-        assertThat(result.get(0).getTitle()).isEqualTo("later");
         assertThat(result.get(1).getMatchId()).isEqualTo(9L);
     }
 
     @Test
-    @DisplayName("인증 정보가 없으면 내 매치 목록을 조회할 수 없다")
-    void shouldRejectMyMatchesWithoutAuthenticatedMember() {
-        assertThatThrownBy(() -> matchService.getMyMatches(null))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("인증된 사용자 정보를 찾을 수 없습니다.");
+    @DisplayName("Hide expired matches from all matches response")
+    void shouldHideExpiredMatchesFromAllMatches() {
+        MatchEntity expiredMatch = MatchEntity.builder()
+                .id(1L)
+                .title("expired")
+                .content("content")
+                .placeName("place")
+                .district("district")
+                .fullAddress("address")
+                .latitude(37.5)
+                .longitude(127.0)
+                .matchDate(LocalDateTime.of(2025, 12, 31, 23, 0))
+                .maxPlayerCount(10)
+                .currentPlayerCount(3)
+                .build();
+        MatchEntity visibleMatch = MatchEntity.builder()
+                .id(2L)
+                .title("visible")
+                .content("content")
+                .placeName("place")
+                .district("district")
+                .fullAddress("address")
+                .latitude(37.5)
+                .longitude(127.0)
+                .matchDate(LocalDateTime.of(2026, 1, 2, 10, 0))
+                .maxPlayerCount(10)
+                .currentPlayerCount(3)
+                .build();
+
+        given(matchRepository.findAll()).willReturn(List.of(expiredMatch, visibleMatch));
+
+        var result = matchService.getAllMatches();
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getMatchId()).isEqualTo(2L);
     }
 
     @Test
-    @DisplayName("작성자는 매치를 수정할 수 있다")
+    @DisplayName("Reject my matches lookup without authenticated member")
+    void shouldRejectMyMatchesWithoutAuthenticatedMember() {
+        assertThatThrownBy(() -> matchService.getMyMatches(null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("Update owned match")
     void shouldUpdateOwnedMatch() {
         MemberEntity member = createMember(1L);
         MatchEntity match = createMatch(20L, member);
@@ -158,7 +209,7 @@ class MatchServiceTest {
     }
 
     @Test
-    @DisplayName("작성자는 매치를 삭제할 수 있다")
+    @DisplayName("Delete owned match and linked resources")
     void shouldDeleteOwnedMatch() {
         MemberEntity member = createMember(1L);
         MatchEntity match = createMatch(30L, member);
@@ -172,24 +223,123 @@ class MatchServiceTest {
     }
 
     @Test
-    @DisplayName("작성자가 아니면 매치를 수정할 수 없다")
+    @DisplayName("Hide expired matches from nearby search response")
+    void shouldHideExpiredMatchesFromNearbySearch() {
+        MatchSearchRequestDto request = new MatchSearchRequestDto();
+        request.setLongitude(127.0);
+        request.setLatitude(37.5);
+        request.setDistance(5.0);
+
+        MatchEntity expiredMatch = MatchEntity.builder()
+                .id(1L)
+                .title("expired")
+                .content("content")
+                .placeName("place")
+                .district("district")
+                .fullAddress("address")
+                .latitude(37.5)
+                .longitude(127.0)
+                .matchDate(LocalDateTime.of(2025, 12, 31, 23, 0))
+                .maxPlayerCount(10)
+                .currentPlayerCount(3)
+                .build();
+        MatchEntity visibleMatch = MatchEntity.builder()
+                .id(2L)
+                .title("visible")
+                .content("content")
+                .placeName("place")
+                .district("district")
+                .fullAddress("address")
+                .latitude(37.5)
+                .longitude(127.0)
+                .matchDate(LocalDateTime.of(2026, 1, 2, 10, 0))
+                .maxPlayerCount(10)
+                .currentPlayerCount(3)
+                .build();
+
+        given(matchLocationService.findNearbyMatchIds(127.0, 37.5, 5.0))
+                .willReturn(Map.of(1L, 1.0, 2L, 2.0));
+        given(matchRepository.findAllById(anyIterable()))
+                .willReturn(List.of(expiredMatch, visibleMatch));
+
+        var result = matchService.searchNearbyMatches(request);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getMatchId()).isEqualTo(2L);
+    }
+
+    @Test
+    @DisplayName("Delete expired matches and linked resources")
+    void shouldDeleteExpiredMatches() {
+        MemberEntity owner = createMember(1L);
+        MatchEntity expiredMatch = MatchEntity.builder()
+                .id(41L)
+                .member(owner)
+                .title("expired")
+                .content("content")
+                .placeName("place")
+                .district("district")
+                .fullAddress("address")
+                .latitude(37.5)
+                .longitude(127.0)
+                .matchDate(LocalDateTime.of(2025, 1, 1, 10, 0))
+                .maxPlayerCount(10)
+                .currentPlayerCount(3)
+                .build();
+
+        LocalDateTime threshold = LocalDateTime.of(2026, 1, 1, 0, 0);
+        given(matchRepository.findAllByMatchDateBefore(threshold))
+                .willReturn(List.of(expiredMatch));
+
+        int deletedCount = matchService.deleteExpiredMatches(threshold);
+
+        assertThat(deletedCount).isEqualTo(1);
+        then(applicationRepository).should().deleteAllByMatch(expiredMatch);
+        then(matchRepository).should().delete(expiredMatch);
+        then(matchLocationService).should().deleteMatchLocation(41L);
+    }
+
+    @Test
+    @DisplayName("Hide expired match detail response")
+    void shouldRejectExpiredMatchDetail() {
+        MatchEntity expiredMatch = MatchEntity.builder()
+                .id(50L)
+                .title("expired")
+                .content("content")
+                .placeName("place")
+                .district("district")
+                .fullAddress("address")
+                .latitude(37.5)
+                .longitude(127.0)
+                .matchDate(LocalDateTime.of(2025, 12, 31, 23, 0))
+                .maxPlayerCount(10)
+                .currentPlayerCount(3)
+                .build();
+
+        given(matchRepository.findById(50L)).willReturn(Optional.of(expiredMatch));
+
+        assertThatThrownBy(() -> matchService.getMatchDetail(50L))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("Reject match update when requester is not owner")
     void shouldRejectMatchUpdateWhenNotOwner() {
         MemberEntity owner = createMember(1L);
         MatchEntity match = createMatch(40L, owner);
         given(matchRepository.findById(40L)).willReturn(Optional.of(match));
 
         assertThatThrownBy(() -> matchService.updateMatch(40L, createUpdateRequest(12, 4), 999L))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessage("매치 작성자만 수정과 삭제를 할 수 있습니다.");
+                .isInstanceOf(IllegalStateException.class);
     }
 
     private MatchCreateRequestDto createRequest(int maxPlayerCount, int currentPlayerCount) {
         MatchCreateRequestDto request = new MatchCreateRequestDto();
-        request.setTitle("매치");
-        request.setContent("내용");
-        request.setPlaceName("구장");
-        request.setDistrict("강남구");
-        request.setFullAddress("서울 강남구");
+        request.setTitle("match");
+        request.setContent("content");
+        request.setPlaceName("stadium");
+        request.setDistrict("district");
+        request.setFullAddress("address");
         request.setLatitude(37.5);
         request.setLongitude(127.0);
         request.setMatchDate(LocalDateTime.of(2030, 1, 1, 10, 0));

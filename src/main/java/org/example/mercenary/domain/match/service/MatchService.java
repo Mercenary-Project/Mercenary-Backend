@@ -14,6 +14,8 @@ import org.example.mercenary.domain.member.repository.MemberRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -21,17 +23,19 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class MatchService {
+
     private final MatchRepository matchRepository;
     private final MatchLocationService matchLocationService;
     private final MemberRepository memberRepository;
     private final ApplicationRepository applicationRepository;
+    private final Clock appClock;
 
     @Transactional
     public Long createMatch(MatchCreateRequestDto request, Long memberId) {
         validateMatchPlayerCount(request.getMaxPlayerCount(), request.getCurrentPlayerCount());
 
         MemberEntity member = memberRepository.findById(memberId)
-                .orElseThrow(() -> new IllegalArgumentException("회원을 찾을 수 없습니다."));
+                .orElseThrow(() -> new IllegalArgumentException("Member not found."));
 
         MatchEntity savedMatch = matchRepository.save(MatchEntity.from(request, member));
 
@@ -46,6 +50,7 @@ public class MatchService {
 
     @Transactional(readOnly = true)
     public List<MatchSearchResponseDto> searchNearbyMatches(MatchSearchRequestDto request) {
+        LocalDateTime now = currentDateTime();
         Map<Long, Double> nearbyMatchData = matchLocationService.findNearbyMatchIds(
                 request.getLongitude(),
                 request.getLatitude(),
@@ -60,17 +65,20 @@ public class MatchService {
         List<MatchEntity> matches = matchRepository.findAllById(matchIds);
 
         return matches.stream()
-                .map(match -> {
-                    Double distance = nearbyMatchData.getOrDefault(match.getId(), 0.0);
-                    return MatchSearchResponseDto.from(match, distance);
-                })
+                .filter(match -> !isExpired(match, now))
+                .map(match -> MatchSearchResponseDto.from(
+                        match,
+                        nearbyMatchData.getOrDefault(match.getId(), 0.0)
+                ))
                 .sorted((m1, m2) -> Double.compare(m1.getDistance(), m2.getDistance()))
                 .collect(Collectors.toList());
     }
 
     @Transactional(readOnly = true)
     public List<MatchSearchResponseDto> getAllMatches() {
+        LocalDateTime now = currentDateTime();
         return matchRepository.findAll().stream()
+                .filter(match -> !isExpired(match, now))
                 .map(match -> MatchSearchResponseDto.from(match, 0.0))
                 .collect(Collectors.toList());
     }
@@ -78,10 +86,12 @@ public class MatchService {
     @Transactional(readOnly = true)
     public List<MatchSearchResponseDto> getMyMatches(Long memberId) {
         if (memberId == null) {
-            throw new IllegalArgumentException("인증된 사용자 정보를 찾을 수 없습니다.");
+            throw new IllegalArgumentException("Authenticated member is required.");
         }
 
+        LocalDateTime now = currentDateTime();
         return matchRepository.findAllByMemberIdOrderByMatchDateDesc(memberId).stream()
+                .filter(match -> !isExpired(match, now))
                 .map(match -> MatchSearchResponseDto.from(match, 0.0))
                 .collect(Collectors.toList());
     }
@@ -89,7 +99,11 @@ public class MatchService {
     @Transactional(readOnly = true)
     public MatchDetailResponseDto getMatchDetail(Long matchId) {
         MatchEntity match = matchRepository.findById(matchId)
-                .orElseThrow(() -> new IllegalArgumentException("해당 매치를 찾을 수 없습니다. id=" + matchId));
+                .orElseThrow(() -> new IllegalArgumentException("Match not found. id=" + matchId));
+
+        if (isExpired(match, currentDateTime())) {
+            throw new IllegalArgumentException("Match not found. id=" + matchId);
+        }
 
         return MatchDetailResponseDto.from(match);
     }
@@ -106,38 +120,56 @@ public class MatchService {
     @Transactional
     public void deleteMatch(Long matchId, Long memberId) {
         MatchEntity match = getOwnedMatch(matchId, memberId);
+        deleteMatchResources(match);
+    }
 
-        applicationRepository.deleteAllByMatch(match);
-        matchRepository.delete(match);
-        matchLocationService.deleteMatchLocation(matchId);
+    @Transactional
+    public int deleteExpiredMatches(LocalDateTime threshold) {
+        List<MatchEntity> expiredMatches = matchRepository.findAllByMatchDateBefore(threshold);
+        expiredMatches.forEach(this::deleteMatchResources);
+        return expiredMatches.size();
     }
 
     private void validateMatchPlayerCount(Integer maxPlayerCount, Integer currentPlayerCount) {
         if (currentPlayerCount == null || currentPlayerCount < 1) {
-            throw new IllegalArgumentException("현재 인원은 1명 이상이어야 합니다.");
+            throw new IllegalArgumentException("Current player count must be at least 1.");
         }
 
         if (maxPlayerCount == null) {
-            throw new IllegalArgumentException("최대 인원을 입력해 주세요.");
+            throw new IllegalArgumentException("Max player count is required.");
         }
 
         if (currentPlayerCount > maxPlayerCount) {
-            throw new IllegalArgumentException("현재 인원은 최대 인원보다 클 수 없습니다.");
+            throw new IllegalArgumentException("Current player count cannot exceed max player count.");
         }
     }
 
     private MatchEntity getOwnedMatch(Long matchId, Long memberId) {
         if (memberId == null) {
-            throw new IllegalArgumentException("인증된 사용자 정보를 찾을 수 없습니다.");
+            throw new IllegalArgumentException("Authenticated member is required.");
         }
 
         MatchEntity match = matchRepository.findById(matchId)
-                .orElseThrow(() -> new IllegalArgumentException("해당 매치를 찾을 수 없습니다. id=" + matchId));
+                .orElseThrow(() -> new IllegalArgumentException("Match not found. id=" + matchId));
 
         if (match.getMember() == null || !memberId.equals(match.getMember().getId())) {
-            throw new IllegalStateException("매치 작성자만 수정과 삭제를 할 수 있습니다.");
+            throw new IllegalStateException("Only the owner can modify or delete this match.");
         }
 
         return match;
+    }
+
+    private void deleteMatchResources(MatchEntity match) {
+        applicationRepository.deleteAllByMatch(match);
+        matchRepository.delete(match);
+        matchLocationService.deleteMatchLocation(match.getId());
+    }
+
+    private boolean isExpired(MatchEntity match, LocalDateTime now) {
+        return match.getMatchDate() != null && match.getMatchDate().isBefore(now);
+    }
+
+    private LocalDateTime currentDateTime() {
+        return LocalDateTime.now(appClock);
     }
 }

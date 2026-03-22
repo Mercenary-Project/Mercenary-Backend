@@ -17,6 +17,7 @@ import org.redisson.api.RedissonClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -92,6 +93,14 @@ public class ApplicationService {
 
     protected void processApplication(Long matchId, Long userId) {
         MatchEntity match = getMatch(matchId);
+
+        if (match.getMatchDate() != null && match.getMatchDate().isBefore(LocalDateTime.now())) {
+            throw new IllegalStateException("이미 종료된 경기에는 신청할 수 없습니다.");
+        }
+
+        if (match.getCurrentPlayerCount() >= match.getMaxPlayerCount()) {
+            throw new IllegalStateException("모집이 마감된 경기입니다.");
+        }
 
         if (match.getMember() != null && Objects.equals(match.getMember().getId(), userId)) {
             throw new IllegalStateException("본인이 만든 매치에는 참가 신청할 수 없습니다.");

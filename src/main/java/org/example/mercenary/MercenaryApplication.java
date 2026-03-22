@@ -3,8 +3,10 @@ package org.example.mercenary;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.data.jpa.repository.config.EnableJpaAuditing;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
-@EnableJpaAuditing
+@EnableJpaAuditing(dateTimeProviderRef = "auditingDateTimeProvider")
+@EnableScheduling
 @SpringBootApplication
 public class MercenaryApplication {
     public static void main(String[] args) {

@@ -259,6 +259,35 @@ class ApplicationServiceUnitTest {
                 .isInstanceOf(IllegalStateException.class);
     }
 
+    @Test
+    @DisplayName("지난 경기에는 신청할 수 없다")
+    void shouldRejectApplyWhenMatchAlreadyExpired() throws Exception {
+        MatchEntity match = createMatch(1L, 10L, 3, MatchStatus.RECRUITING);
+        ReflectionTestUtils.setField(match, "matchDate", LocalDateTime.now().minusMinutes(1));
+
+        mockLock(10L);
+        given(memberRepository.existsById(2L)).willReturn(true);
+        given(matchRepository.findById(10L)).willReturn(Optional.of(match));
+
+        assertThatThrownBy(() -> applicationService.applyMatch(10L, 2L))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("이미 종료된 경기에는 신청할 수 없습니다.");
+    }
+
+    @Test
+    @DisplayName("정원이 찬 경기에는 신청할 수 없다")
+    void shouldRejectApplyWhenMatchAlreadyFull() throws Exception {
+        MatchEntity match = createMatch(1L, 10L, 5, MatchStatus.CLOSED);
+
+        mockLock(10L);
+        given(memberRepository.existsById(2L)).willReturn(true);
+        given(matchRepository.findById(10L)).willReturn(Optional.of(match));
+
+        assertThatThrownBy(() -> applicationService.applyMatch(10L, 2L))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("모집이 마감된 경기입니다.");
+    }
+
     private void mockLock(Long matchId) throws Exception {
         given(redissonClient.getLock("match:" + matchId + ":lock")).willReturn(lock);
         given(lock.tryLock(5, 3, TimeUnit.SECONDS)).willReturn(true);
