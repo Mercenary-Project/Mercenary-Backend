@@ -1,0 +1,51 @@
+name: Backend CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    env:
+      JWT_SECRET: ci-test-jwt-secret-key-with-enough-length-1234567890
+      KAKAO_CLIENT_ID: ci-kakao-client-id
+      KAKAO_REDIRECT_URI: http://localhost:5173/login/callback
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+
+      - name: Make Gradle executable
+        run: chmod +x ./gradlew
+
+      - name: Verify project compiles
+        run: ./gradlew clean build -x test
+
+      - name: Run stable CI tests
+        run: >
+          ./gradlew test
+          --tests "org.example.mercenary.domain.match.service.MatchServiceTest"
+          --tests "org.example.mercenary.domain.application.service.ApplicationServiceUnitTest"
+          --tests "org.example.mercenary.global.auth.SecurityAuthenticationTest"
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: |
+            build/reports/tests/test
+            build/test-results/test
