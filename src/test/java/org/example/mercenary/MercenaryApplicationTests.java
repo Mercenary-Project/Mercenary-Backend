@@ -1,10 +1,7 @@
 package org.example.mercenary;
 
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
-
-@SpringBootTest
-class MercenaryApplicationTests {
+class MercenaryApplicationTests extends AbstractSpringBootTestSupport {
 
     @Test
     void contextLoads() {

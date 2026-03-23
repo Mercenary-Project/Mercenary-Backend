@@ -4,6 +4,7 @@ import org.example.mercenary.domain.member.dto.AuthTokenResponse;
 import org.example.mercenary.domain.member.dto.DevLoginRequest;
 import org.example.mercenary.domain.member.service.AuthService;
 import org.example.mercenary.global.auth.JwtTokenProvider;
+import org.example.mercenary.global.config.TimeConfig;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,6 +13,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.data.jpa.mapping.JpaMetamodelMappingContext;
 import org.springframework.http.MediaType;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -23,6 +25,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest(AuthController.class)
 @AutoConfigureMockMvc(addFilters = false)
 @TestPropertySource(properties = "auth.dev-login-enabled=true")
+@Import(TimeConfig.class)
 class AuthControllerTest {
 
     @Autowired

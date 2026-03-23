@@ -55,6 +55,7 @@ dependencies {
         //  Test (이거 하나면 끝! 이상한 이름의 test 라이브러리는 다 지우세요)
         testImplementation 'org.springframework.boot:spring-boot-starter-test'
         testImplementation 'org.springframework.security:spring-security-test'
+        testRuntimeOnly 'com.h2database:h2'
         testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 
           //  보안을 위한 Spring Security

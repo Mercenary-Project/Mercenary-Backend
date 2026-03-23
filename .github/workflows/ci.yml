@@ -34,12 +34,8 @@ jobs:
       - name: Verify project compiles
         run: ./gradlew clean build -x test
 
-      - name: Run stable CI tests
-        run: >
-          ./gradlew test
-          --tests "org.example.mercenary.domain.match.service.MatchServiceTest"
-          --tests "org.example.mercenary.domain.application.service.ApplicationServiceUnitTest"
-          --tests "org.example.mercenary.global.auth.SecurityAuthenticationTest"
+      - name: Run full test suite
+        run: ./gradlew test
 
       - name: Upload test reports
         if: failure()
