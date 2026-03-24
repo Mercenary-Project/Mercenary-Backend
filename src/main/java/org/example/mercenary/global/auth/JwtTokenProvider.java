@@ -5,16 +5,15 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
 import jakarta.annotation.PostConstruct;
+import java.security.Key;
+import java.util.Base64;
+import java.util.Date;
+import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.stereotype.Component;
-
-import java.security.Key;
-import java.util.Base64;
-import java.util.Date;
-import java.util.List;
 
 @Component
 public class JwtTokenProvider {
@@ -64,7 +63,7 @@ public class JwtTokenProvider {
 
     private String normalizeRole(String role) {
         if (role == null || role.isBlank()) {
-            throw new IllegalArgumentException("권한 정보가 없는 토큰입니다.");
+            throw new InvalidTokenException("권한 정보가 없는 토큰입니다.");
         }
         return role.startsWith("ROLE_") ? role : "ROLE_" + role;
     }

@@ -14,11 +14,11 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    @ExceptionHandler({IllegalArgumentException.class, IllegalStateException.class})
-    public ResponseEntity<ApiResponseDto<?>> handleBusinessException(RuntimeException e) {
-        log.warn("Business exception: {}", e.getMessage());
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponseDto.error(400, e.getMessage()));
+    @ExceptionHandler(BusinessException.class)
+    public ResponseEntity<ApiResponseDto<?>> handleBusinessException(BusinessException e) {
+        log.warn("Business exception [{}]: {}", e.getCode(), e.getMessage());
+        return ResponseEntity.status(e.getStatus())
+                .body(ApiResponseDto.error(e.getCode(), e.getMessage()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

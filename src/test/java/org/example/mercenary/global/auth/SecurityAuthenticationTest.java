@@ -1,8 +1,24 @@
 package org.example.mercenary.global.auth;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.then;
+import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.never;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.MalformedJwtException;
+import java.time.LocalDateTime;
+import java.util.Date;
+import java.util.List;
 import org.example.mercenary.domain.application.controller.ApplicationController;
 import org.example.mercenary.domain.application.dto.AppliedMatchResponseDto;
 import org.example.mercenary.domain.application.dto.MyApplicationStatusResponseDto;
@@ -13,6 +29,10 @@ import org.example.mercenary.domain.match.dto.MatchSearchResponseDto;
 import org.example.mercenary.domain.match.service.MatchService;
 import org.example.mercenary.global.config.SecurityConfig;
 import org.example.mercenary.global.config.TimeConfig;
+import org.example.mercenary.global.exception.BadRequestException;
+import org.example.mercenary.global.exception.ConflictException;
+import org.example.mercenary.global.exception.ForbiddenException;
+import org.example.mercenary.global.exception.NotFoundException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,22 +45,6 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
-
-import java.time.LocalDateTime;
-import java.util.Date;
-import java.util.List;
-
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.BDDMockito.given;
-import static org.mockito.BDDMockito.then;
-import static org.mockito.Mockito.never;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(controllers = {MatchController.class, ApplicationController.class})
 @Import({
@@ -81,7 +85,7 @@ class SecurityAuthenticationTest {
     }
 
     @Test
-    @DisplayName("만료된 토큰이면 지원 요청은 401을 반환한다")
+    @DisplayName("만료 토큰이면 신청 요청은 401을 반환한다")
     void shouldReturnUnauthorizedWhenTokenExpired() throws Exception {
         given(jwtTokenProvider.getAuthentication("expired-token"))
                 .willThrow(new ExpiredJwtException(
@@ -98,7 +102,7 @@ class SecurityAuthenticationTest {
     }
 
     @Test
-    @DisplayName("유효하지 않은 토큰이면 지원 요청은 401을 반환한다")
+    @DisplayName("유효하지 않은 토큰이면 신청 요청은 401을 반환한다")
     void shouldReturnUnauthorizedWhenTokenInvalid() throws Exception {
         given(jwtTokenProvider.getAuthentication("invalid-token"))
                 .willThrow(new MalformedJwtException("invalid"));
@@ -111,7 +115,7 @@ class SecurityAuthenticationTest {
     }
 
     @Test
-    @DisplayName("정상 토큰이면 지원 요청을 처리한다")
+    @DisplayName("정상 토큰이면 신청 요청을 처리한다")
     void shouldApplyMatchWhenTokenValid() throws Exception {
         given(jwtTokenProvider.getAuthentication("valid-token"))
                 .willReturn(authenticatedUser(7L));
@@ -125,7 +129,7 @@ class SecurityAuthenticationTest {
     }
 
     @Test
-    @DisplayName("정상 토큰이면 내 지원 상태를 조회한다")
+    @DisplayName("정상 토큰이면 내 신청 상태를 조회한다")
     void shouldGetMyApplicationStatusWhenTokenValid() throws Exception {
         given(jwtTokenProvider.getAuthentication("valid-token"))
                 .willReturn(authenticatedUser(7L));
@@ -144,7 +148,7 @@ class SecurityAuthenticationTest {
     }
 
     @Test
-    @DisplayName("정상 토큰이면 지원 요청 취소가 가능하다")
+    @DisplayName("정상 토큰이면 신청 취소가 가능하다")
     void shouldCancelMyApplicationWhenTokenValid() throws Exception {
         given(jwtTokenProvider.getAuthentication("valid-token"))
                 .willReturn(authenticatedUser(7L));
@@ -158,7 +162,7 @@ class SecurityAuthenticationTest {
     }
 
     @Test
-    @DisplayName("토큰이 없으면 지원 취소는 401을 반환한다")
+    @DisplayName("토큰이 없으면 신청 취소는 401을 반환한다")
     void shouldReturnUnauthorizedWhenCancelMyApplicationTokenMissing() throws Exception {
         mockMvc.perform(delete("/api/matches/3/application/me"))
                 .andExpect(status().isUnauthorized())
@@ -169,7 +173,7 @@ class SecurityAuthenticationTest {
     }
 
     @Test
-    @DisplayName("정상 토큰이면 내가 지원한 매치 목록을 조회한다")
+    @DisplayName("정상 토큰이면 내가 신청한 매치 목록을 조회한다")
     void shouldGetAppliedMatchesWhenTokenValid() throws Exception {
         given(jwtTokenProvider.getAuthentication("valid-token"))
                 .willReturn(authenticatedUser(7L));
@@ -197,7 +201,7 @@ class SecurityAuthenticationTest {
     }
 
     @Test
-    @DisplayName("토큰이 없으면 내가 지원한 매치 목록 조회는 401을 반환한다")
+    @DisplayName("토큰이 없으면 내가 신청한 매치 목록 조회는 401을 반환한다")
     void shouldReturnUnauthorizedWhenGetAppliedMatchesTokenMissing() throws Exception {
         mockMvc.perform(get("/api/matches/applied"))
                 .andExpect(status().isUnauthorized())
@@ -317,6 +321,65 @@ class SecurityAuthenticationTest {
                 .andExpect(jsonPath("$.data").value(99L));
 
         then(matchService).should().createMatch(any(), eq(7L));
+    }
+
+    @Test
+    @DisplayName("비즈니스 입력 오류는 400으로 응답한다")
+    void shouldReturnBadRequestWhenBusinessExceptionOccurs() throws Exception {
+        given(jwtTokenProvider.getAuthentication("valid-token"))
+                .willReturn(authenticatedUser(7L));
+        given(matchService.createMatch(any(), eq(7L)))
+                .willThrow(new BadRequestException("Current player count must be at least 1."));
+
+        mockMvc.perform(post("/api/matches")
+                        .header("Authorization", "Bearer valid-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validCreateMatchRequest()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message").value("Current player count must be at least 1."));
+    }
+
+    @Test
+    @DisplayName("신청 충돌은 409로 응답한다")
+    void shouldReturnConflictWhenApplicationAlreadyExists() throws Exception {
+        given(jwtTokenProvider.getAuthentication("valid-token"))
+                .willReturn(authenticatedUser(7L));
+        willThrow(new ConflictException("이미 참가 신청한 매치입니다."))
+                .given(applicationService).applyMatch(3L, 7L);
+
+        mockMvc.perform(post("/api/matches/3/apply")
+                        .header("Authorization", "Bearer valid-token"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value(409))
+                .andExpect(jsonPath("$.message").value("이미 참가 신청한 매치입니다."));
+    }
+
+    @Test
+    @DisplayName("없는 매치 상세 조회는 404로 응답한다")
+    void shouldReturnNotFoundWhenMatchDoesNotExist() throws Exception {
+        given(matchService.getMatchDetail(999L))
+                .willThrow(new NotFoundException("Match not found. id=999"));
+
+        mockMvc.perform(get("/api/matches/999"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value(404))
+                .andExpect(jsonPath("$.message").value("Match not found. id=999"));
+    }
+
+    @Test
+    @DisplayName("작성자가 아닌 사용자의 삭제는 403으로 응답한다")
+    void shouldReturnForbiddenWhenRequesterIsNotOwner() throws Exception {
+        given(jwtTokenProvider.getAuthentication("valid-token"))
+                .willReturn(authenticatedUser(7L));
+        willThrow(new ForbiddenException("Only the owner can modify or delete this match."))
+                .given(matchService).deleteMatch(9L, 7L);
+
+        mockMvc.perform(delete("/api/matches/9")
+                        .header("Authorization", "Bearer valid-token"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(403))
+                .andExpect(jsonPath("$.message").value("Only the owner can modify or delete this match."));
     }
 
     @Test

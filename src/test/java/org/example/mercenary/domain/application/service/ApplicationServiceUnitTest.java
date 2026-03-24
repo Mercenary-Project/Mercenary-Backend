@@ -1,5 +1,15 @@
 package org.example.mercenary.domain.application.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.then;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 import org.example.mercenary.domain.application.entity.ApplicationEntity;
 import org.example.mercenary.domain.application.entity.ApplicationStatus;
 import org.example.mercenary.domain.application.repository.ApplicationRepository;
@@ -9,6 +19,8 @@ import org.example.mercenary.domain.match.repository.MatchRepository;
 import org.example.mercenary.domain.member.entity.MemberEntity;
 import org.example.mercenary.domain.member.entity.Role;
 import org.example.mercenary.domain.member.repository.MemberRepository;
+import org.example.mercenary.global.exception.ConflictException;
+import org.example.mercenary.global.exception.ForbiddenException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -18,17 +30,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 import org.springframework.test.util.ReflectionTestUtils;
-
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Optional;
-import java.util.concurrent.TimeUnit;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.BDDMockito.given;
-import static org.mockito.BDDMockito.then;
 
 @ExtendWith(MockitoExtension.class)
 class ApplicationServiceUnitTest {
@@ -52,7 +53,7 @@ class ApplicationServiceUnitTest {
     private ApplicationService applicationService;
 
     @Test
-    @DisplayName("다른 사용자는 매치에 참가 신청할 수 있다")
+    @DisplayName("Allow apply when applicant is not owner")
     void shouldApplyWhenApplicantIsDifferentUser() throws Exception {
         MatchEntity match = createMatch(1L, 10L, 3, MatchStatus.RECRUITING);
 
@@ -68,7 +69,7 @@ class ApplicationServiceUnitTest {
     }
 
     @Test
-    @DisplayName("작성자는 자기 매치에 참가 신청할 수 없다")
+    @DisplayName("Reject apply when applicant is owner")
     void shouldRejectWhenApplicantIsOwner() throws Exception {
         MatchEntity match = createMatch(1L, 10L, 3, MatchStatus.RECRUITING);
 
@@ -77,12 +78,12 @@ class ApplicationServiceUnitTest {
         given(matchRepository.findById(10L)).willReturn(Optional.of(match));
 
         assertThatThrownBy(() -> applicationService.applyMatch(10L, 1L))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(ConflictException.class)
                 .hasMessage("본인이 만든 매치에는 참가 신청할 수 없습니다.");
     }
 
     @Test
-    @DisplayName("내 신청 상태를 조회할 수 있다")
+    @DisplayName("Get my application status")
     void shouldGetMyApplicationStatus() {
         MatchEntity match = createMatch(1L, 10L, 3, MatchStatus.RECRUITING);
         ApplicationEntity application = ApplicationEntity.builder()
@@ -104,7 +105,7 @@ class ApplicationServiceUnitTest {
     }
 
     @Test
-    @DisplayName("작성자는 신청자 목록을 조회할 수 있다")
+    @DisplayName("Get applications for owner")
     void shouldGetApplicationsForOwner() {
         MatchEntity match = createMatch(1L, 10L, 3, MatchStatus.RECRUITING);
         ApplicationEntity application = ApplicationEntity.builder()
@@ -133,7 +134,7 @@ class ApplicationServiceUnitTest {
     }
 
     @Test
-    @DisplayName("신청자는 자신이 신청한 매치 목록을 조회할 수 있다")
+    @DisplayName("Get applied matches for applicant")
     void shouldGetAppliedMatchesForApplicant() {
         MatchEntity match = createMatch(1L, 10L, 3, MatchStatus.RECRUITING);
         ApplicationEntity application = ApplicationEntity.builder()
@@ -156,7 +157,7 @@ class ApplicationServiceUnitTest {
     }
 
     @Test
-    @DisplayName("신청 내역이 없으면 빈 배열을 반환한다")
+    @DisplayName("Return empty applied matches when nothing applied")
     void shouldReturnEmptyAppliedMatchesWhenNothingApplied() {
         given(memberRepository.existsById(2L)).willReturn(true);
         given(applicationRepository.findAppliedMatchesByUserId(2L)).willReturn(List.of());
@@ -167,7 +168,7 @@ class ApplicationServiceUnitTest {
     }
 
     @Test
-    @DisplayName("신청자는 대기 중인 신청을 취소할 수 있다")
+    @DisplayName("Cancel ready application")
     void shouldCancelReadyApplication() throws Exception {
         MatchEntity match = createMatch(1L, 10L, 3, MatchStatus.RECRUITING);
         ApplicationEntity application = ApplicationEntity.builder()
@@ -187,7 +188,7 @@ class ApplicationServiceUnitTest {
     }
 
     @Test
-    @DisplayName("대기 중이 아닌 신청은 취소할 수 없다")
+    @DisplayName("Reject cancel when application already processed")
     void shouldRejectCancelWhenApplicationAlreadyProcessed() throws Exception {
         MatchEntity match = createMatch(1L, 10L, 3, MatchStatus.RECRUITING);
         ApplicationEntity application = ApplicationEntity.builder()
@@ -202,12 +203,12 @@ class ApplicationServiceUnitTest {
         given(applicationRepository.findByMatchAndUserId(match, 2L)).willReturn(Optional.of(application));
 
         assertThatThrownBy(() -> applicationService.cancelApplication(10L, 2L))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(ConflictException.class)
                 .hasMessage("대기 중인 참가 신청만 취소할 수 있습니다.");
     }
 
     @Test
-    @DisplayName("작성자는 대기 중인 신청을 승인할 수 있다")
+    @DisplayName("Approve application")
     void shouldApproveApplication() throws Exception {
         MatchEntity match = createMatch(1L, 10L, 4, MatchStatus.RECRUITING);
         ApplicationEntity application = ApplicationEntity.builder()
@@ -228,7 +229,7 @@ class ApplicationServiceUnitTest {
     }
 
     @Test
-    @DisplayName("작성자는 대기 중인 신청을 거절할 수 있다")
+    @DisplayName("Reject application")
     void shouldRejectApplication() throws Exception {
         MatchEntity match = createMatch(1L, 10L, 4, MatchStatus.RECRUITING);
         ApplicationEntity application = ApplicationEntity.builder()
@@ -248,7 +249,7 @@ class ApplicationServiceUnitTest {
     }
 
     @Test
-    @DisplayName("작성자가 아니면 신청 상태를 변경할 수 없다")
+    @DisplayName("Reject decision when requester is not owner")
     void shouldRejectDecisionWhenRequesterIsNotOwner() throws Exception {
         MatchEntity match = createMatch(1L, 10L, 4, MatchStatus.RECRUITING);
 
@@ -256,11 +257,11 @@ class ApplicationServiceUnitTest {
         given(matchRepository.findById(10L)).willReturn(Optional.of(match));
 
         assertThatThrownBy(() -> applicationService.updateApplicationStatus(10L, 100L, 2L, ApplicationStatus.APPROVED))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(ForbiddenException.class);
     }
 
     @Test
-    @DisplayName("지난 경기에는 신청할 수 없다")
+    @DisplayName("Reject apply when match already expired")
     void shouldRejectApplyWhenMatchAlreadyExpired() throws Exception {
         MatchEntity match = createMatch(1L, 10L, 3, MatchStatus.RECRUITING);
         ReflectionTestUtils.setField(match, "matchDate", LocalDateTime.now().minusMinutes(1));
@@ -270,12 +271,12 @@ class ApplicationServiceUnitTest {
         given(matchRepository.findById(10L)).willReturn(Optional.of(match));
 
         assertThatThrownBy(() -> applicationService.applyMatch(10L, 2L))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(ConflictException.class)
                 .hasMessage("이미 종료된 경기에는 신청할 수 없습니다.");
     }
 
     @Test
-    @DisplayName("정원이 찬 경기에는 신청할 수 없다")
+    @DisplayName("Reject apply when match already full")
     void shouldRejectApplyWhenMatchAlreadyFull() throws Exception {
         MatchEntity match = createMatch(1L, 10L, 5, MatchStatus.CLOSED);
 
@@ -284,7 +285,7 @@ class ApplicationServiceUnitTest {
         given(matchRepository.findById(10L)).willReturn(Optional.of(match));
 
         assertThatThrownBy(() -> applicationService.applyMatch(10L, 2L))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(ConflictException.class)
                 .hasMessage("모집이 마감된 경기입니다.");
     }
 
@@ -305,16 +306,16 @@ class ApplicationServiceUnitTest {
 
         MatchEntity match = MatchEntity.builder()
                 .member(owner)
-                .title("매치")
-                .content("내용")
-                .placeName("구장")
-                .district("강남구")
+                .title("match")
+                .content("content")
+                .placeName("stadium")
+                .district("gangnam")
                 .matchDate(LocalDateTime.of(2030, 1, 1, 10, 0))
                 .maxPlayerCount(5)
                 .currentPlayerCount(currentPlayerCount)
                 .latitude(37.5)
                 .longitude(127.0)
-                .fullAddress("서울 강남구")
+                .fullAddress("seoul")
                 .status(status)
                 .build();
         ReflectionTestUtils.setField(match, "id", matchId);

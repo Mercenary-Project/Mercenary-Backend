@@ -1,5 +1,20 @@
 package org.example.mercenary.domain.match.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyIterable;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.then;
+import static org.mockito.Mockito.lenient;
+
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import org.example.mercenary.domain.application.repository.ApplicationRepository;
 import org.example.mercenary.domain.match.dto.MatchCreateRequestDto;
 import org.example.mercenary.domain.match.dto.MatchSearchRequestDto;
@@ -9,6 +24,9 @@ import org.example.mercenary.domain.match.repository.MatchRepository;
 import org.example.mercenary.domain.member.entity.MemberEntity;
 import org.example.mercenary.domain.member.entity.Role;
 import org.example.mercenary.domain.member.repository.MemberRepository;
+import org.example.mercenary.global.exception.BadRequestException;
+import org.example.mercenary.global.exception.ForbiddenException;
+import org.example.mercenary.global.exception.NotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -18,22 +36,6 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
-
-import java.time.Clock;
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyIterable;
-import static org.mockito.BDDMockito.given;
-import static org.mockito.BDDMockito.then;
-import static org.mockito.Mockito.lenient;
 
 @ExtendWith(MockitoExtension.class)
 class MatchServiceTest {
@@ -68,7 +70,7 @@ class MatchServiceTest {
         MatchCreateRequestDto request = createRequest(10, 0);
 
         assertThatThrownBy(() -> matchService.createMatch(request, 1L))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(BadRequestException.class);
 
         then(memberRepository).shouldHaveNoInteractions();
         then(matchRepository).shouldHaveNoInteractions();
@@ -105,7 +107,7 @@ class MatchServiceTest {
         MatchCreateRequestDto request = createRequest(5, 6);
 
         assertThatThrownBy(() -> matchService.createMatch(request, 1L))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(BadRequestException.class);
     }
 
     @Test
@@ -138,8 +140,7 @@ class MatchServiceTest {
                 .currentPlayerCount(2)
                 .build();
 
-        given(matchRepository.findAllByMemberIdOrderByMatchDateDesc(7L))
-                .willReturn(List.of(newerMatch, olderMatch));
+        given(matchRepository.findAllByMemberIdOrderByMatchDateDesc(7L)).willReturn(List.of(newerMatch, olderMatch));
 
         var result = matchService.getMyMatches(7L);
 
@@ -190,7 +191,7 @@ class MatchServiceTest {
     @DisplayName("Reject my matches lookup without authenticated member")
     void shouldRejectMyMatchesWithoutAuthenticatedMember() {
         assertThatThrownBy(() -> matchService.getMyMatches(null))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(BadRequestException.class);
     }
 
     @Test
@@ -257,10 +258,8 @@ class MatchServiceTest {
                 .currentPlayerCount(3)
                 .build();
 
-        given(matchLocationService.findNearbyMatchIds(127.0, 37.5, 5.0))
-                .willReturn(Map.of(1L, 1.0, 2L, 2.0));
-        given(matchRepository.findAllById(anyIterable()))
-                .willReturn(List.of(expiredMatch, visibleMatch));
+        given(matchLocationService.findNearbyMatchIds(127.0, 37.5, 5.0)).willReturn(Map.of(1L, 1.0, 2L, 2.0));
+        given(matchRepository.findAllById(anyIterable())).willReturn(List.of(expiredMatch, visibleMatch));
 
         var result = matchService.searchNearbyMatches(request);
 
@@ -288,8 +287,7 @@ class MatchServiceTest {
                 .build();
 
         LocalDateTime threshold = LocalDateTime.of(2026, 1, 1, 0, 0);
-        given(matchRepository.findAllByMatchDateBefore(threshold))
-                .willReturn(List.of(expiredMatch));
+        given(matchRepository.findAllByMatchDateBefore(threshold)).willReturn(List.of(expiredMatch));
 
         int deletedCount = matchService.deleteExpiredMatches(threshold);
 
@@ -319,7 +317,7 @@ class MatchServiceTest {
         given(matchRepository.findById(50L)).willReturn(Optional.of(expiredMatch));
 
         assertThatThrownBy(() -> matchService.getMatchDetail(50L))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(NotFoundException.class);
     }
 
     @Test
@@ -330,7 +328,7 @@ class MatchServiceTest {
         given(matchRepository.findById(40L)).willReturn(Optional.of(match));
 
         assertThatThrownBy(() -> matchService.updateMatch(40L, createUpdateRequest(12, 4), 999L))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(ForbiddenException.class);
     }
 
     private MatchCreateRequestDto createRequest(int maxPlayerCount, int currentPlayerCount) {

@@ -1,5 +1,10 @@
 package org.example.mercenary.domain.match.service;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.example.mercenary.domain.application.repository.ApplicationRepository;
 import org.example.mercenary.domain.match.dto.MatchCreateRequestDto;
@@ -11,14 +16,11 @@ import org.example.mercenary.domain.match.entity.MatchEntity;
 import org.example.mercenary.domain.match.repository.MatchRepository;
 import org.example.mercenary.domain.member.entity.MemberEntity;
 import org.example.mercenary.domain.member.repository.MemberRepository;
+import org.example.mercenary.global.exception.BadRequestException;
+import org.example.mercenary.global.exception.ForbiddenException;
+import org.example.mercenary.global.exception.NotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.time.Clock;
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -35,7 +37,7 @@ public class MatchService {
         validateMatchPlayerCount(request.getMaxPlayerCount(), request.getCurrentPlayerCount());
 
         MemberEntity member = memberRepository.findById(memberId)
-                .orElseThrow(() -> new IllegalArgumentException("Member not found."));
+                .orElseThrow(() -> new NotFoundException("Member not found."));
 
         MatchEntity savedMatch = matchRepository.save(MatchEntity.from(request, member));
 
@@ -66,10 +68,7 @@ public class MatchService {
 
         return matches.stream()
                 .filter(match -> !isExpired(match, now))
-                .map(match -> MatchSearchResponseDto.from(
-                        match,
-                        nearbyMatchData.getOrDefault(match.getId(), 0.0)
-                ))
+                .map(match -> MatchSearchResponseDto.from(match, nearbyMatchData.getOrDefault(match.getId(), 0.0)))
                 .sorted((m1, m2) -> Double.compare(m1.getDistance(), m2.getDistance()))
                 .collect(Collectors.toList());
     }
@@ -86,7 +85,7 @@ public class MatchService {
     @Transactional(readOnly = true)
     public List<MatchSearchResponseDto> getMyMatches(Long memberId) {
         if (memberId == null) {
-            throw new IllegalArgumentException("Authenticated member is required.");
+            throw new BadRequestException("Authenticated member is required.");
         }
 
         LocalDateTime now = currentDateTime();
@@ -99,10 +98,10 @@ public class MatchService {
     @Transactional(readOnly = true)
     public MatchDetailResponseDto getMatchDetail(Long matchId) {
         MatchEntity match = matchRepository.findById(matchId)
-                .orElseThrow(() -> new IllegalArgumentException("Match not found. id=" + matchId));
+                .orElseThrow(() -> new NotFoundException("Match not found. id=" + matchId));
 
         if (isExpired(match, currentDateTime())) {
-            throw new IllegalArgumentException("Match not found. id=" + matchId);
+            throw new NotFoundException("Match not found. id=" + matchId);
         }
 
         return MatchDetailResponseDto.from(match);
@@ -132,28 +131,28 @@ public class MatchService {
 
     private void validateMatchPlayerCount(Integer maxPlayerCount, Integer currentPlayerCount) {
         if (currentPlayerCount == null || currentPlayerCount < 1) {
-            throw new IllegalArgumentException("Current player count must be at least 1.");
+            throw new BadRequestException("Current player count must be at least 1.");
         }
 
         if (maxPlayerCount == null) {
-            throw new IllegalArgumentException("Max player count is required.");
+            throw new BadRequestException("Max player count is required.");
         }
 
         if (currentPlayerCount > maxPlayerCount) {
-            throw new IllegalArgumentException("Current player count cannot exceed max player count.");
+            throw new BadRequestException("Current player count cannot exceed max player count.");
         }
     }
 
     private MatchEntity getOwnedMatch(Long matchId, Long memberId) {
         if (memberId == null) {
-            throw new IllegalArgumentException("Authenticated member is required.");
+            throw new BadRequestException("Authenticated member is required.");
         }
 
         MatchEntity match = matchRepository.findById(matchId)
-                .orElseThrow(() -> new IllegalArgumentException("Match not found. id=" + matchId));
+                .orElseThrow(() -> new NotFoundException("Match not found. id=" + matchId));
 
         if (match.getMember() == null || !memberId.equals(match.getMember().getId())) {
-            throw new IllegalStateException("Only the owner can modify or delete this match.");
+            throw new ForbiddenException("Only the owner can modify or delete this match.");
         }
 
         return match;
