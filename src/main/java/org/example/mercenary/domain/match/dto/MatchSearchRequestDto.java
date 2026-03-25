@@ -1,4 +1,6 @@
 package org.example.mercenary.domain.match.dto;
+
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
@@ -9,15 +11,25 @@ import lombok.Setter;
 
 @Getter
 @Setter
-@NoArgsConstructor // 기본 생성자 (필수!)
-@AllArgsConstructor // 모든 필드 생성자
+@NoArgsConstructor
+@AllArgsConstructor
 public class MatchSearchRequestDto {
-    @NotNull @Min(-90) @Max(90)
+
+    @Schema(description = "검색 기준 위도", example = "37.498095")
+    @NotNull
+    @Min(-90)
+    @Max(90)
     private Double latitude;
-    @NotNull @Min(-180) @Max(180)
+
+    @Schema(description = "검색 기준 경도", example = "127.027610")
+    @NotNull
+    @Min(-180)
+    @Max(180)
     private Double longitude;
 
-    // 검색 반경 (Km 단위)
-    @NotNull @Min(1) @Max(50) // 최소 1km, 최대 50km까지 검색 허용
+    @Schema(description = "검색 반경(km)", example = "5")
+    @NotNull
+    @Min(1)
+    @Max(50)
     private Double distance;
 }
