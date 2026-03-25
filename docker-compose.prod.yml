@@ -16,7 +16,7 @@ services:
       SPRING_PROFILES_ACTIVE: prod
       DB_URL: ${DB_URL:-jdbc:mysql://mysql:3306/mercenary?serverTimezone=Asia/Seoul&characterEncoding=UTF-8}
       DB_USERNAME: ${DB_USERNAME:-mercenary}
-      DB_PASSWORD: ${DB_PASSWORD:-mercenary}
+      DB_PASSWORD: ${DB_PASSWORD}
       REDIS_HOST: ${REDIS_HOST:-redis}
       REDIS_PORT: ${REDIS_PORT:-6379}
       JWT_SECRET: ${JWT_SECRET}
@@ -35,8 +35,8 @@ services:
     environment:
       MYSQL_DATABASE: ${MYSQL_DATABASE:-mercenary}
       MYSQL_USER: ${MYSQL_USER:-mercenary}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-mercenary}
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
     expose:
       - "3306"
     volumes:
