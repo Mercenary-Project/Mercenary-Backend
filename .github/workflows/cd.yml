@@ -52,8 +52,17 @@ jobs:
           git checkout main
           git pull origin main
 
-          docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
-          docker compose --env-file .env.prod -f docker-compose.prod.yml ps
+          if docker compose version >/dev/null 2>&1; then
+            COMPOSE_CMD="docker compose"
+          elif command -v docker-compose >/dev/null 2>&1; then
+            COMPOSE_CMD="docker-compose"
+          else
+            echo "docker compose or docker-compose is required on the server"
+            exit 1
+          fi
+
+          $COMPOSE_CMD --env-file .env.prod -f docker-compose.prod.yml up -d --build
+          $COMPOSE_CMD --env-file .env.prod -f docker-compose.prod.yml ps
 
           curl -f http://localhost:8080/actuator/health
           EOF
