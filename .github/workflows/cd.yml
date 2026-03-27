@@ -38,7 +38,7 @@ jobs:
           SSH_USER: ${{ secrets.EC2_USERNAME }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
-          ssh -p "${SSH_PORT:-22}" "${SSH_USER}@${SSH_HOST}" <<EOF
+          ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=10 -p "${SSH_PORT:-22}" "${SSH_USER}@${SSH_HOST}" <<EOF
           set -e
 
           cd "${DEPLOY_PATH}"
