@@ -1,0 +1,59 @@
+name: Backend CD
+
+on:
+  workflow_run:
+    workflows:
+      - Backend CI
+    types:
+      - completed
+
+concurrency:
+  group: backend-production-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
+          SSH_HOST: ${{ secrets.EC2_HOST }}
+          SSH_PORT: ${{ secrets.EC2_PORT }}
+        run: |
+          mkdir -p ~/.ssh
+          printf "%s" "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -p "${SSH_PORT:-22}" "$SSH_HOST" >> ~/.ssh/known_hosts
+
+      - name: Deploy to server
+        env:
+          SSH_HOST: ${{ secrets.EC2_HOST }}
+          SSH_PORT: ${{ secrets.EC2_PORT }}
+          SSH_USER: ${{ secrets.EC2_USERNAME }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          ssh -p "${SSH_PORT:-22}" "${SSH_USER}@${SSH_HOST}" <<EOF
+          set -e
+
+          cd "${DEPLOY_PATH}"
+
+          if [ ! -f ".env.prod" ]; then
+            echo ".env.prod file not found in deploy path"
+            exit 1
+          fi
+
+          git fetch origin main
+          git checkout main
+          git pull origin main
+
+          docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
+          docker compose --env-file .env.prod -f docker-compose.prod.yml ps
+
+          curl -f http://localhost:8080/actuator/health
+          EOF
