@@ -26,6 +26,7 @@ import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @Slf4j
 @Service
@@ -36,11 +37,12 @@ public class ApplicationService {
     private final MatchRepository matchRepository;
     private final ApplicationRepository applicationRepository;
     private final MemberRepository memberRepository;
+    private final TransactionTemplate transactionTemplate;
 
-    @Transactional
     public void applyMatch(Long matchId, Long userId) {
         validateApplicant(userId);
-        executeWithMatchLock(matchId, () -> processApplication(matchId, userId));
+        executeWithMatchLock(matchId,
+                () -> transactionTemplate.executeWithoutResult(status -> processApplication(matchId, userId)));
     }
 
     @Transactional(readOnly = true)
@@ -62,10 +64,10 @@ public class ApplicationService {
                 .toList();
     }
 
-    @Transactional
     public void cancelApplication(Long matchId, Long userId) {
         validateApplicant(userId);
-        executeWithMatchLock(matchId, () -> processApplicationCancellation(matchId, userId));
+        executeWithMatchLock(matchId, () -> transactionTemplate
+                .executeWithoutResult(status -> processApplicationCancellation(matchId, userId)));
     }
 
     @Transactional(readOnly = true)
@@ -73,22 +75,22 @@ public class ApplicationService {
         MatchEntity match = getOwnedMatch(matchId, memberId);
         List<ApplicationEntity> applications = applicationRepository.findAllByMatchOrderByCreatedAtAsc(match);
         Map<Long, MemberEntity> memberMap = memberRepository.findAllById(
-                        applications.stream().map(ApplicationEntity::getUserId).distinct().toList()
-                ).stream()
+                applications.stream().map(ApplicationEntity::getUserId).distinct().toList()).stream()
                 .collect(Collectors.toMap(MemberEntity::getId, member -> member));
 
         return applications.stream()
-                .map(application -> ApplicationSummaryResponseDto.from(application, memberMap.get(application.getUserId())))
+                .map(application -> ApplicationSummaryResponseDto.from(application,
+                        memberMap.get(application.getUserId())))
                 .toList();
     }
 
-    @Transactional
     public void updateApplicationStatus(Long matchId, Long applicationId, Long memberId, ApplicationStatus status) {
         if (status != ApplicationStatus.APPROVED && status != ApplicationStatus.REJECTED) {
             throw new BadRequestException("신청 상태는 APPROVED 또는 REJECTED만 처리할 수 있습니다.");
         }
 
-        executeWithMatchLock(matchId, () -> processApplicationDecision(matchId, applicationId, memberId, status));
+        executeWithMatchLock(matchId, () -> transactionTemplate
+                .executeWithoutResult(s -> processApplicationDecision(matchId, applicationId, memberId, status)));
     }
 
     protected void processApplication(Long matchId, Long userId) {
@@ -116,9 +118,11 @@ public class ApplicationService {
                 .build();
 
         applicationRepository.save(application);
+        match.increasePlayerCount();
     }
 
-    protected void processApplicationDecision(Long matchId, Long applicationId, Long memberId, ApplicationStatus status) {
+    protected void processApplicationDecision(Long matchId, Long applicationId, Long memberId,
+            ApplicationStatus status) {
         MatchEntity match = getOwnedMatch(matchId, memberId);
         ApplicationEntity application = applicationRepository.findByIdAndMatch(applicationId, match)
                 .orElseThrow(() -> new NotFoundException("해당 신청 내역을 찾을 수 없습니다."));

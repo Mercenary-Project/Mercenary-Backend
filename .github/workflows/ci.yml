@@ -12,6 +12,12 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
 
+    services:
+      redis:
+        image: redis:latest
+        ports:
+          - 6379:6379
+
     env:
       JWT_SECRET: ci-test-jwt-secret-key-with-enough-length-1234567890
       KAKAO_CLIENT_ID: ci-kakao-client-id
