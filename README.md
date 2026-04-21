@@ -12,6 +12,9 @@
 - JWT 인증 및 만료 응답 규칙 정리
 - 테스트 환경 분리 및 GitHub Actions CI 적용
 
+## 시스템 아키텍처 (System Architecture)
+
+![Architecture](./architecture.png)
 ## 기술 스택
 
 - Java 17
@@ -227,7 +230,6 @@ curl http://localhost:8080/actuator/health
 ## 다음 작업 후보
 
 - Flyway 또는 Liquibase 도입
-- 백엔드 CD 도입
+
 - 운영 배포 문서 보강
 - 알림 기능 추가
-- README에 아키텍처 다이어그램 추가
