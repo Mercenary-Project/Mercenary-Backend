@@ -1,0 +1,54 @@
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: mercenary-backend:k6-test
+    restart: "no"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      DB_URL: jdbc:mysql://mysql:3306/mercenary_test?serverTimezone=Asia/Seoul&characterEncoding=UTF-8&createDatabaseIfNotExist=true
+      DB_USERNAME: root
+      DB_PASSWORD: testpass123
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: k6-test-secret-key-that-is-long-enough-for-hmac-sha256
+      KAKAO_CLIENT_ID: dummy-kakao-client-id
+      KAKAO_REDIRECT_URI: http://localhost:5173/login/callback
+      APP_CORS_ALLOWED_ORIGINS: "*"
+      AUTH_DEV_LOGIN_ENABLED: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health || exit 1"]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+      start_period: 30s
+
+  mysql:
+    image: mysql:8.0
+    restart: "no"
+    environment:
+      MYSQL_DATABASE: mercenary_test
+      MYSQL_ROOT_PASSWORD: testpass123
+    ports:
+      - "3308:3306"
+    tmpfs:
+      - /var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p\"$$MYSQL_ROOT_PASSWORD\""]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: "no"
+    ports:
+      - "6380:6379"
