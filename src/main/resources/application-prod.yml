@@ -15,6 +15,11 @@ spring:
         format_sql: false
         show_sql: false
 
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 0
+
   data:
     redis:
       host: ${REDIS_HOST}

@@ -1,0 +1,2 @@
+ALTER TABLE applications
+    ADD COLUMN position VARCHAR(50) NOT NULL DEFAULT 'GK';

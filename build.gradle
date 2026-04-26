@@ -52,6 +52,9 @@ dependencies {
         // Actuator
         implementation 'org.springframework.boot:spring-boot-starter-actuator'
 
+        // Flyway (MySQL DB 마이그레이션)
+        implementation 'org.flywaydb:flyway-mysql:10.10.0'
+
         //  Test (이거 하나면 끝! 이상한 이름의 test 라이브러리는 다 지우세요)
         testImplementation 'org.springframework.boot:spring-boot-starter-test'
         testImplementation 'org.springframework.security:spring-security-test'
