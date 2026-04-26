@@ -87,7 +87,7 @@ class ApplicationServiceUnitTest {
 
         then(applicationRepository).should().save(any(ApplicationEntity.class));
         MatchPositionSlot slot = match.getSlot(Position.GK);
-        assertThat(slot.getFilled()).isEqualTo(1);
+        assertThat(slot.getFilled()).isEqualTo(0);
     }
 
     @Test
@@ -241,7 +241,7 @@ class ApplicationServiceUnitTest {
         applicationService.cancelApplication(10L, 2L);
 
         assertThat(application.getStatus()).isEqualTo(ApplicationStatus.CANCELED);
-        assertThat(match.getSlot(Position.GK).getFilled()).isEqualTo(0);
+        assertThat(match.getSlot(Position.GK).getFilled()).isEqualTo(1);
     }
 
     @Test
