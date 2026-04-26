@@ -2,23 +2,32 @@ package org.example.mercenary.domain.match.service;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
+import org.springframework.data.domain.PageRequest;
 import lombok.RequiredArgsConstructor;
 import org.example.mercenary.domain.application.repository.ApplicationRepository;
+import org.example.mercenary.domain.common.Position;
 import org.example.mercenary.domain.match.dto.MatchCreateRequestDto;
 import org.example.mercenary.domain.match.dto.MatchDetailResponseDto;
 import org.example.mercenary.domain.match.dto.MatchSearchRequestDto;
 import org.example.mercenary.domain.match.dto.MatchSearchResponseDto;
 import org.example.mercenary.domain.match.dto.MatchUpdateRequestDto;
+import org.example.mercenary.domain.match.dto.PositionSlotDto;
 import org.example.mercenary.domain.match.entity.MatchEntity;
+import org.example.mercenary.domain.match.entity.MatchPositionSlot;
 import org.example.mercenary.domain.match.repository.MatchRepository;
 import org.example.mercenary.domain.member.entity.MemberEntity;
 import org.example.mercenary.domain.member.repository.MemberRepository;
 import org.example.mercenary.global.exception.BadRequestException;
 import org.example.mercenary.global.exception.ForbiddenException;
 import org.example.mercenary.global.exception.NotFoundException;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,14 +41,21 @@ public class MatchService {
     private final ApplicationRepository applicationRepository;
     private final Clock appClock;
 
+    @CacheEvict(value = "matches", allEntries = true)
     @Transactional
     public Long createMatch(MatchCreateRequestDto request, Long memberId) {
-        validateMatchPlayerCount(request.getMaxPlayerCount(), request.getCurrentPlayerCount());
+        validateSlots(request.getSlots());
 
         MemberEntity member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new NotFoundException("Member not found."));
 
-        MatchEntity savedMatch = matchRepository.save(MatchEntity.from(request, member));
+        MatchEntity match = MatchEntity.from(request, member);
+
+        for (PositionSlotDto slotDto : request.getSlots()) {
+            match.getSlots().add(MatchPositionSlot.of(match, slotDto.getPosition(), slotDto.getRequired()));
+        }
+
+        MatchEntity savedMatch = matchRepository.save(match);
 
         matchLocationService.addMatchLocation(
                 savedMatch.getId(),
@@ -73,10 +89,11 @@ public class MatchService {
                 .collect(Collectors.toList());
     }
 
+    @Cacheable(value = "matches", key = "'p' + #page + ':s' + #size")
     @Transactional(readOnly = true)
-    public List<MatchSearchResponseDto> getAllMatches() {
+    public List<MatchSearchResponseDto> getAllMatches(int page, int size) {
         LocalDateTime now = currentDateTime();
-        return matchRepository.findAll().stream()
+        return matchRepository.findAll(PageRequest.of(page, size)).stream()
                 .filter(match -> !isExpired(match, now))
                 .map(match -> MatchSearchResponseDto.from(match, 0.0))
                 .collect(Collectors.toList());
@@ -95,6 +112,7 @@ public class MatchService {
                 .collect(Collectors.toList());
     }
 
+    @Cacheable(value = "matchDetail", key = "#matchId")
     @Transactional(readOnly = true)
     public MatchDetailResponseDto getMatchDetail(Long matchId) {
         MatchEntity match = matchRepository.findById(matchId)
@@ -107,21 +125,34 @@ public class MatchService {
         return MatchDetailResponseDto.from(match);
     }
 
+    @Caching(evict = {
+        @CacheEvict(value = "matches", allEntries = true),
+        @CacheEvict(value = "matchDetail", key = "#matchId")
+    })
     @Transactional
     public void updateMatch(Long matchId, MatchUpdateRequestDto request, Long memberId) {
-        validateMatchPlayerCount(request.getMaxPlayerCount(), request.getCurrentPlayerCount());
+        validateSlots(request.getSlots());
 
         MatchEntity match = getOwnedMatch(matchId, memberId);
         match.update(request);
+        match.updateSlots(request.getSlots());
         matchLocationService.updateMatchLocation(matchId, request.getLongitude(), request.getLatitude());
     }
 
+    @Caching(evict = {
+        @CacheEvict(value = "matches", allEntries = true),
+        @CacheEvict(value = "matchDetail", key = "#matchId")
+    })
     @Transactional
     public void deleteMatch(Long matchId, Long memberId) {
         MatchEntity match = getOwnedMatch(matchId, memberId);
         deleteMatchResources(match);
     }
 
+    @Caching(evict = {
+        @CacheEvict(value = "matches", allEntries = true),
+        @CacheEvict(value = "matchDetail", allEntries = true)
+    })
     @Transactional
     public int deleteExpiredMatches(LocalDateTime threshold) {
         List<MatchEntity> expiredMatches = matchRepository.findAllByMatchDateBefore(threshold);
@@ -129,17 +160,16 @@ public class MatchService {
         return expiredMatches.size();
     }
 
-    private void validateMatchPlayerCount(Integer maxPlayerCount, Integer currentPlayerCount) {
-        if (currentPlayerCount == null || currentPlayerCount < 1) {
-            throw new BadRequestException("Current player count must be at least 1.");
+    private void validateSlots(List<PositionSlotDto> slots) {
+        if (slots == null || slots.isEmpty()) {
+            throw new BadRequestException("포지션 슬롯을 하나 이상 입력해 주세요.");
         }
 
-        if (maxPlayerCount == null) {
-            throw new BadRequestException("Max player count is required.");
-        }
-
-        if (currentPlayerCount > maxPlayerCount) {
-            throw new BadRequestException("Current player count cannot exceed max player count.");
+        Set<Position> seen = new HashSet<>();
+        for (PositionSlotDto slot : slots) {
+            if (!seen.add(slot.getPosition())) {
+                throw new BadRequestException("동일한 포지션을 중복으로 입력할 수 없습니다.");
+            }
         }
     }
 

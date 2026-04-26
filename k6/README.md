@@ -1,77 +1,126 @@
-# k6 동시성 제어 & 부하 테스트
+# k6 성능 테스트 (동시성 제어 · 부하 · 캐시)
 
-Mercenary 백엔드의 **Redisson 분산 락 기반 동시성 제어**가 실제 HTTP 요청에서도 정상 동작하는지 검증하는 k6 테스트입니다.
+Mercenary 백엔드의 **Redisson 분산 락 기반 동시성 제어**, **API 부하 성능**, **Redis 캐시 효과**를 k6로 측정하고 Grafana로 시각화합니다.
 
 ## 📋 테스트 시나리오
 
 | 스크립트 | 목적 | VU | 검증 포인트 |
 |---------|------|-----|-----------|
 | `concurrency-test.js` | 동시성 제어 정합성 | 100 | 9자리에 100명 동시 신청 → 정확히 9명만 성공 |
-| `load-test.js` | API 성능 측정 | 0→50 | p95 응답시간, 처리량, 에러율 |
+| `load-test.js` | API 부하 성능 측정 | 0→50 | p95 응답시간, 처리량, 에러율 |
+| `cache-read-test.js` | Redis 캐시 효과 측정 | 0→100 | 캐시 Hit 시 p95 응답시간 200ms 이하 |
+
+---
 
 ## 🚀 실행 방법
 
 ### 1. 테스트 환경 기동
 
 ```bash
-# 프로젝트 루트에서 실행
+# 프로젝트 루트에서 실행 (앱 + MySQL + Redis + InfluxDB + Grafana 일괄 기동)
 docker compose -f k6/docker-compose.k6.yml up --build -d
 
-# 앱이 완전히 뜰 때까지 대기 (healthcheck)
+# 앱이 완전히 뜰 때까지 대기 (healthcheck 통과 확인)
 docker compose -f k6/docker-compose.k6.yml logs -f app
-# "Started MercenaryApplication" 메시지가 보이면 Ctrl+C
+# "Started MercenaryApplication" 메시지 확인 후 Ctrl+C
 ```
 
-### 2. 동시성 테스트 실행
+### 2. Grafana 접속
+
+브라우저에서 **http://localhost:3000** 접속 (로그인 불필요 - 익명 Admin)
+
+좌측 메뉴 → Dashboards → **"Mercenary k6 성능 테스트 대시보드"** 선택
+
+> k6 실행 중 5초마다 자동 갱신됩니다.
+
+---
+
+### 3. 동시성 제어 테스트
 
 ```bash
-k6 run k6/concurrency-test.js
+# Grafana 드롭다운에서 "concurrency" 선택 시 이 테스트 데이터만 표시
+k6 run --out influxdb=http://localhost:8086/k6 k6/concurrency-test.js
 ```
 
 **기대 결과:**
-- `apply_success`: 정확히 **9** (= maxPlayerCount 10 - initialCount 1)
-- `apply_fail`: 정확히 **91** (= 100 - 9)
-- teardown에서 `currentPlayerCount == 10` 확인
 
-### 3. 부하 테스트 실행
+| 메트릭 | 기대값 | 의미 |
+|--------|--------|------|
+| `apply_success` | **9** | 분산 락이 초과 신청을 정확히 차단 |
+| `apply_fail` | **91** | 락 경합으로 인한 409 응답 |
+| teardown `currentPlayerCount` | **10** | DB 정합성 최종 검증 |
+
+---
+
+### 4. 부하 테스트
 
 ```bash
-k6 run k6/load-test.js
+# Grafana 드롭다운에서 "load" 선택 시 이 테스트 데이터만 표시
+k6 run --out influxdb=http://localhost:8086/k6 k6/load-test.js
 ```
 
-**기대 결과:**
-- `http_req_duration{p(95)}` < 3초
-- `error_rate` < 15%
+**임계값 (thresholds):**
 
-### 4. 테스트 환경 정리
+| 메트릭 | 기준 |
+|--------|------|
+| `http_req_duration` p95 | < 3,000ms |
+| `match_list_duration` p95 | < 1,000ms |
+| `match_apply_duration` p95 | < 2,000ms |
+| `error_rate` | < 15% |
+
+---
+
+### 5. 캐시 효과 측정 테스트
+
+```bash
+# Grafana 드롭다운에서 "cache" 선택 시 이 테스트 데이터만 표시
+k6 run --out influxdb=http://localhost:8086/k6 k6/cache-read-test.js
+```
+
+**테스트 구조 (Miss vs Hit 비교):**
+
+| Phase | 시간 | VU | 측정 내용 |
+|-------|------|----|---------|
+| Phase 1 (cache_miss) | 0s ~ 30s | 50 | 캐시 없는 파라미터 → DB 직접 조회 |
+| Phase 2 (cache_hit)  | 40s ~ 2m | 0→100 | 워밍업된 파라미터 → Redis 캐시 Hit |
+
+- **Miss**: `size=11~19` (캐시 미적재) / `matchId` 워밍업 범위 밖
+- **Hit**: `size=20`, `page=0` (setup에서 워밍업 완료) / `matchId` 0~99번
+
+**임계값 (thresholds):**
+
+| 메트릭 | 기준 | 의미 |
+|--------|------|------|
+| `match_list_miss_duration` p95 | < 800ms | DB 직접 조회 허용 범위 |
+| `match_list_hit_duration` p95  | < 80ms  | Redis 캐시 Hit 목표 |
+| `match_detail_miss_duration` p95 | < 500ms | DB 직접 조회 허용 범위 |
+| `match_detail_hit_duration` p95  | < 80ms  | Redis 캐시 Hit 목표 |
+| `error_rate` | < 1% | 안정성 |
+
+> 테스트 완료 후 터미널에 Miss/Hit p95 비교표가 출력됩니다.
+> TTFB(`timings.waiting`)를 측정하므로 네트워크 전송 시간은 제외됩니다.
+
+---
+
+### 6. 테스트 환경 정리
 
 ```bash
 docker compose -f k6/docker-compose.k6.yml down
 ```
 
-## 📊 결과 해석
+---
 
-### 동시성 테스트 출력 예시
+## 📊 HTML 리포트
 
-```
-✅ 동시성 테스트 결과:
-매치 정원:    10명
-현재 인원:    10명
-기대 인원:    10명
-정합성 검증:  ✅ PASS
+각 테스트 완료 후 프로젝트 루트에 HTML 리포트가 생성됩니다.
 
-✓ apply_success....: 9   ✓
-✓ apply_fail.......: 91  ✓
-```
+| 파일 | 해당 테스트 |
+|------|-----------|
+| `concurrency_summary.html` | 동시성 제어 테스트 |
+| `summary.html` | 부하 테스트 |
+| `summary-cache-read.html` | 캐시 효과 측정 테스트 |
 
-### 부하 테스트 주요 메트릭
-
-| 메트릭 | 설명 | 기준 |
-|--------|------|------|
-| `http_req_duration` | 전체 요청 응답시간 | p95 < 3s |
-| `match_apply_duration` | 매치 신청 응답시간 | p95 < 2s |
-| `match_list_duration` | 매치 목록 조회 응답시간 | p95 < 1s |
-| `error_rate` | 에러 비율 | < 15% |
+---
 
 ## ⚙️ 환경 변수
 
@@ -80,9 +129,13 @@ docker compose -f k6/docker-compose.k6.yml down
 | `BASE_URL` | `http://localhost:8080` | 테스트 대상 서버 URL |
 
 ```bash
-# 다른 서버를 대상으로 테스트할 경우
-k6 run -e BASE_URL=http://192.168.1.100:8080 k6/concurrency-test.js
+# 다른 서버를 대상으로 테스트
+k6 run --out influxdb=http://localhost:8086/k6 \
+  -e BASE_URL=http://192.168.1.100:8080 \
+  k6/concurrency-test.js
 ```
+
+---
 
 ## 🔧 사전 요구사항
 

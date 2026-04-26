@@ -1,12 +1,15 @@
 package org.example.mercenary.domain.match.dto;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.example.mercenary.domain.match.entity.MatchEntity;
 
-import java.time.format.DateTimeFormatter;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Data
 @Builder
@@ -17,26 +20,28 @@ public class MatchDetailResponseDto {
     private String title;
     private String content;
     private String placeName;
-    private String fullAddress; // 주소 추가
-    private String matchDate;   // 보기 좋게 포맷팅된 날짜
-    private int maxPlayerCount;     // 총 인원 (Entity와 이름 맞춤)
-    private int currentPlayerCount; // 현재 인원 (Entity와 이름 맞춤)
-    private String status;      // 모집중/마감 상태
-    private String writerName;  // 작성자 이름
+    private String fullAddress;
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
+    private LocalDateTime matchDate;
+    private String status;
+    private String writerName;
+    private List<PositionSlotResponseDto> slots;
+    private boolean isFullyBooked;
 
-    // Entity -> DTO 변환 메서드
     public static MatchDetailResponseDto from(MatchEntity match) {
         return MatchDetailResponseDto.builder()
                 .matchId(match.getId())
                 .title(match.getTitle())
                 .content(match.getContent())
                 .placeName(match.getPlaceName())
-                .fullAddress(match.getFullAddress()) // Entity에 있는 필드 활용
-                .matchDate(match.getMatchDate().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))) // 날짜 예쁘게 변환
-                .maxPlayerCount(match.getMaxPlayerCount()) //
-                .currentPlayerCount(match.getCurrentPlayerCount()) //
-                .status(match.getStatus().name()) // Enum -> String 변환 (RECRUITING 등)
+                .fullAddress(match.getFullAddress())
+                .matchDate(match.getMatchDate())
+                .status(match.getStatus().name())
                 .writerName(match.getMember() != null ? match.getMember().getNickname() : "알 수 없음")
+                .slots(match.getSlots().stream()
+                        .map(PositionSlotResponseDto::from)
+                        .collect(Collectors.toList()))
+                .isFullyBooked(match.isFullyBooked())
                 .build();
     }
 }

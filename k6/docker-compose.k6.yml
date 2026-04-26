@@ -25,7 +25,7 @@ services:
       APP_CORS_ALLOWED_ORIGINS: "*"
       AUTH_DEV_LOGIN_ENABLED: "true"
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health || exit 1"]
+      test: [ "CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health || exit 1" ]
       interval: 5s
       timeout: 10s
       retries: 30
@@ -42,7 +42,7 @@ services:
     tmpfs:
       - /var/lib/mysql
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p\"$$MYSQL_ROOT_PASSWORD\""]
+      test: [ "CMD-SHELL", "mysqladmin ping -h localhost -u root -p\"$$MYSQL_ROOT_PASSWORD\"" ]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -52,3 +52,26 @@ services:
     restart: "no"
     ports:
       - "6380:6379"
+
+  k6-influxdb:
+    image: influxdb:1.8
+    restart: "no"
+    ports:
+      - "8086:8086"
+    environment:
+      INFLUXDB_DB: k6
+      INFLUXDB_HTTP_AUTH_ENABLED: "false"
+
+  grafana:
+    image: grafana/grafana:10.2.2
+    restart: "no"
+    ports:
+      - "3000:3000"
+    depends_on:
+      - k6-influxdb
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning

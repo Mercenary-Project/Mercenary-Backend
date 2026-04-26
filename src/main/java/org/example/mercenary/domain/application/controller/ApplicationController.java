@@ -10,6 +10,7 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.example.mercenary.domain.application.dto.AppliedMatchResponseDto;
 import org.example.mercenary.domain.application.dto.ApplicationDecisionRequestDto;
+import org.example.mercenary.domain.application.dto.ApplicationRequestDto;
 import org.example.mercenary.domain.application.dto.ApplicationSummaryResponseDto;
 import org.example.mercenary.domain.application.dto.MyApplicationStatusResponseDto;
 import org.example.mercenary.domain.application.service.ApplicationService;
@@ -37,6 +38,7 @@ public class ApplicationController {
     @SecurityRequirement(name = "bearerAuth")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "신청 성공"),
+            @ApiResponse(responseCode = "400", description = "잘못된 포지션 요청"),
             @ApiResponse(responseCode = "401", description = "인증 실패"),
             @ApiResponse(responseCode = "404", description = "매치 없음"),
             @ApiResponse(responseCode = "409", description = "중복 신청, 마감, 종료 경기")
@@ -44,9 +46,10 @@ public class ApplicationController {
     @PostMapping("/{matchId}/apply")
     public ResponseEntity<ApiResponseDto<String>> applyMatch(
             @PathVariable Long matchId,
-            @AuthenticationPrincipal(expression = "memberId") Long memberId
+            @AuthenticationPrincipal(expression = "memberId") Long memberId,
+            @Valid @RequestBody ApplicationRequestDto request
     ) {
-        applicationService.applyMatch(matchId, memberId);
+        applicationService.applyMatch(matchId, memberId, request.getPosition());
         return ResponseEntity.ok(ApiResponseDto.success("참가 신청이 성공적으로 완료되었습니다.", null));
     }
 

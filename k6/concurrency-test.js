@@ -1,6 +1,8 @@
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { Counter, Trend } from 'k6/metrics';
+import { htmlReport } from "https://raw.githubusercontent.com/benc-uk/k6-reporter/main/dist/bundle.js";
+import { textSummary } from "https://jslib.k6.io/k6-summary/0.0.2/index.js";
 
 // ─── 커스텀 메트릭 (ASCII 이름 사용 필수) ──────────────────────
 const applySuccess = new Counter('apply_success');   
@@ -16,7 +18,7 @@ const EXPECTED_SUCCESS = MAX_PLAYERS - INITIAL_COUNT;
 
 export const options = {
   scenarios: {
-    concurrency_test: {
+    concurrency: {
       executor: 'per-vu-iterations',
       vus: TOTAL_USERS,
       iterations: 1,          
@@ -136,9 +138,6 @@ export default function (data) {
     applyFail.add(1);
   }
 }
-
-import { htmlReport } from "https://raw.githubusercontent.com/benc-uk/k6-reporter/main/dist/bundle.js";
-import { textSummary } from "https://jslib.k6.io/k6-summary/0.0.2/index.js";
 
 // ─── Teardown: 결과 검증 ─────────────────────────────────────
 export function teardown(data) {

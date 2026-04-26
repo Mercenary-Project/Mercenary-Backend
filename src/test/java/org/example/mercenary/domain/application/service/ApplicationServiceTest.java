@@ -2,7 +2,9 @@ package org.example.mercenary.domain.application.service;
 
 import org.example.mercenary.AbstractSpringBootTestSupport;
 import org.example.mercenary.domain.application.repository.ApplicationRepository;
+import org.example.mercenary.domain.common.Position;
 import org.example.mercenary.domain.match.entity.MatchEntity;
+import org.example.mercenary.domain.match.entity.MatchPositionSlot;
 import org.example.mercenary.domain.match.repository.MatchRepository;
 import org.example.mercenary.domain.member.entity.MemberEntity;
 import org.example.mercenary.domain.member.entity.Role;
@@ -48,19 +50,20 @@ class ApplicationServiceTest extends AbstractSpringBootTestSupport {
                 .role(Role.USER)
                 .build());
 
-        MatchEntity match = matchRepository.save(MatchEntity.builder()
+        MatchEntity matchToSave = MatchEntity.builder()
                 .member(owner)
                 .title("테스트 경기")
                 .content("동시성 테스트")
                 .placeName("강남 구장")
                 .district("강남구")
                 .matchDate(LocalDateTime.now().plusDays(1))
-                .maxPlayerCount(5)
-                .currentPlayerCount(1)
                 .latitude(37.4979)
                 .longitude(127.0276)
                 .fullAddress("서울 강남구")
-                .build());
+                .build();
+
+        matchToSave.getSlots().add(MatchPositionSlot.of(matchToSave, Position.GK, 1));
+        MatchEntity match = matchRepository.save(matchToSave);
 
         List<Long> applicantIds = IntStream.range(0, 100)
                 .mapToObj(i -> memberRepository.save(MemberEntity.builder()
@@ -78,7 +81,7 @@ class ApplicationServiceTest extends AbstractSpringBootTestSupport {
         for (Long applicantId : applicantIds) {
             executorService.submit(() -> {
                 try {
-                    applicationService.applyMatch(match.getId(), applicantId);
+                    applicationService.applyMatch(match.getId(), applicantId, Position.GK);
                 } catch (Exception ignored) {
                 } finally {
                     latch.countDown();
@@ -89,8 +92,6 @@ class ApplicationServiceTest extends AbstractSpringBootTestSupport {
         latch.await();
         executorService.shutdown();
 
-        MatchEntity findMatch = matchRepository.findById(match.getId()).orElseThrow();
-        assertThat(findMatch.getCurrentPlayerCount()).isEqualTo(5);
-        assertThat(applicationRepository.count()).isEqualTo(4L);
+        assertThat(applicationRepository.count()).isEqualTo(1L);
     }
 }

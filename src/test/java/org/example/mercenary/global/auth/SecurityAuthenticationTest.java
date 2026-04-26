@@ -24,6 +24,7 @@ import org.example.mercenary.domain.application.dto.AppliedMatchResponseDto;
 import org.example.mercenary.domain.application.dto.MyApplicationStatusResponseDto;
 import org.example.mercenary.domain.application.entity.ApplicationStatus;
 import org.example.mercenary.domain.application.service.ApplicationService;
+import org.example.mercenary.domain.common.Position;
 import org.example.mercenary.domain.match.controller.MatchController;
 import org.example.mercenary.domain.match.dto.MatchSearchResponseDto;
 import org.example.mercenary.domain.match.service.MatchService;
@@ -95,7 +96,9 @@ class SecurityAuthenticationTest {
                 ));
 
         mockMvc.perform(post("/api/matches/1/apply")
-                        .header("Authorization", "Bearer expired-token"))
+                        .header("Authorization", "Bearer expired-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"position\": \"GK\"}"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("TOKEN_EXPIRED"))
                 .andExpect(jsonPath("$.message").value("만료된 토큰입니다."));
@@ -108,7 +111,9 @@ class SecurityAuthenticationTest {
                 .willThrow(new MalformedJwtException("invalid"));
 
         mockMvc.perform(post("/api/matches/1/apply")
-                        .header("Authorization", "Bearer invalid-token"))
+                        .header("Authorization", "Bearer invalid-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"position\": \"GK\"}"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("TOKEN_INVALID"))
                 .andExpect(jsonPath("$.message").value("유효하지 않은 토큰입니다."));
@@ -121,11 +126,13 @@ class SecurityAuthenticationTest {
                 .willReturn(authenticatedUser(7L));
 
         mockMvc.perform(post("/api/matches/3/apply")
-                        .header("Authorization", "Bearer valid-token"))
+                        .header("Authorization", "Bearer valid-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"position\": \"GK\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200));
 
-        then(applicationService).should().applyMatch(3L, 7L);
+        then(applicationService).should().applyMatch(eq(3L), eq(7L), any(Position.class));
     }
 
     @Test
@@ -184,9 +191,8 @@ class SecurityAuthenticationTest {
                                 .matchId(3L)
                                 .title("applied match")
                                 .placeName("place")
+                                .position(Position.GK)
                                 .status("READY")
-                                .currentPlayerCount(3)
-                                .maxPlayerCount(10)
                                 .build()
                 ));
 
@@ -224,8 +230,7 @@ class SecurityAuthenticationTest {
                                 .placeName("place")
                                 .content("content")
                                 .matchDate(LocalDateTime.of(2030, 1, 1, 10, 0))
-                                .currentPlayerCount(3)
-                                .maxPlayerCount(10)
+                                .slots(List.of())
                                 .build()
                 ));
 
@@ -290,15 +295,27 @@ class SecurityAuthenticationTest {
     }
 
     @Test
-    @DisplayName("현재 인원이 1 미만이면 400을 반환한다")
-    void shouldReturnBadRequestWhenCurrentPlayerCountLessThanOne() throws Exception {
+    @DisplayName("슬롯이 없으면 매치 생성은 400을 반환한다")
+    void shouldReturnBadRequestWhenSlotsEmpty() throws Exception {
         given(jwtTokenProvider.getAuthentication("valid-token"))
                 .willReturn(authenticatedUser(7L));
 
         mockMvc.perform(post("/api/matches")
                         .header("Authorization", "Bearer valid-token")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(validCreateMatchRequest().replace("\"currentPlayerCount\": 1", "\"currentPlayerCount\": 0")))
+                        .content("""
+                                {
+                                  "title": "test",
+                                  "content": "content",
+                                  "placeName": "place",
+                                  "district": "district",
+                                  "fullAddress": "address",
+                                  "latitude": 37.5,
+                                  "longitude": 127.0,
+                                  "matchDate": "2030-01-01T10:00",
+                                  "slots": []
+                                }
+                                """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400));
 
@@ -329,7 +346,7 @@ class SecurityAuthenticationTest {
         given(jwtTokenProvider.getAuthentication("valid-token"))
                 .willReturn(authenticatedUser(7L));
         given(matchService.createMatch(any(), eq(7L)))
-                .willThrow(new BadRequestException("Current player count must be at least 1."));
+                .willThrow(new BadRequestException("동일한 포지션을 중복으로 입력할 수 없습니다."));
 
         mockMvc.perform(post("/api/matches")
                         .header("Authorization", "Bearer valid-token")
@@ -337,7 +354,7 @@ class SecurityAuthenticationTest {
                         .content(validCreateMatchRequest()))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400))
-                .andExpect(jsonPath("$.message").value("Current player count must be at least 1."));
+                .andExpect(jsonPath("$.message").value("동일한 포지션을 중복으로 입력할 수 없습니다."));
     }
 
     @Test
@@ -346,10 +363,12 @@ class SecurityAuthenticationTest {
         given(jwtTokenProvider.getAuthentication("valid-token"))
                 .willReturn(authenticatedUser(7L));
         willThrow(new ConflictException("이미 참가 신청한 매치입니다."))
-                .given(applicationService).applyMatch(3L, 7L);
+                .given(applicationService).applyMatch(eq(3L), eq(7L), any(Position.class));
 
         mockMvc.perform(post("/api/matches/3/apply")
-                        .header("Authorization", "Bearer valid-token"))
+                        .header("Authorization", "Bearer valid-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"position\": \"GK\"}"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value(409))
                 .andExpect(jsonPath("$.message").value("이미 참가 신청한 매치입니다."));
@@ -431,8 +450,10 @@ class SecurityAuthenticationTest {
                   "latitude": 37.5,
                   "longitude": 127.0,
                   "matchDate": "2030-01-01T10:00",
-                  "maxPlayerCount": 10,
-                  "currentPlayerCount": 1
+                  "slots": [
+                    {"position": "GK", "required": 1},
+                    {"position": "ST", "required": 2}
+                  ]
                 }
                 """;
     }
@@ -448,8 +469,10 @@ class SecurityAuthenticationTest {
                   "latitude": 36.5,
                   "longitude": 128.0,
                   "matchDate": "2030-01-02T10:00",
-                  "maxPlayerCount": 12,
-                  "currentPlayerCount": 4
+                  "slots": [
+                    {"position": "GK", "required": 1},
+                    {"position": "ST", "required": 2}
+                  ]
                 }
                 """;
     }

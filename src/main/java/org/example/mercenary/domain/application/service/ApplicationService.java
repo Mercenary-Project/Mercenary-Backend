@@ -14,7 +14,9 @@ import org.example.mercenary.domain.application.dto.MyApplicationStatusResponseD
 import org.example.mercenary.domain.application.entity.ApplicationEntity;
 import org.example.mercenary.domain.application.entity.ApplicationStatus;
 import org.example.mercenary.domain.application.repository.ApplicationRepository;
+import org.example.mercenary.domain.common.Position;
 import org.example.mercenary.domain.match.entity.MatchEntity;
+import org.example.mercenary.domain.match.entity.MatchPositionSlot;
 import org.example.mercenary.domain.match.repository.MatchRepository;
 import org.example.mercenary.domain.member.entity.MemberEntity;
 import org.example.mercenary.domain.member.repository.MemberRepository;
@@ -24,6 +26,7 @@ import org.example.mercenary.global.exception.ForbiddenException;
 import org.example.mercenary.global.exception.NotFoundException;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -39,10 +42,11 @@ public class ApplicationService {
     private final MemberRepository memberRepository;
     private final TransactionTemplate transactionTemplate;
 
-    public void applyMatch(Long matchId, Long userId) {
+    @CacheEvict(value = "matchDetail", key = "#matchId")
+    public void applyMatch(Long matchId, Long userId, Position position) {
         validateApplicant(userId);
         executeWithMatchLock(matchId,
-                () -> transactionTemplate.executeWithoutResult(status -> processApplication(matchId, userId)));
+                () -> transactionTemplate.executeWithoutResult(status -> processApplication(matchId, userId, position)));
     }
 
     @Transactional(readOnly = true)
@@ -64,6 +68,7 @@ public class ApplicationService {
                 .toList();
     }
 
+    @CacheEvict(value = "matchDetail", key = "#matchId")
     public void cancelApplication(Long matchId, Long userId) {
         validateApplicant(userId);
         executeWithMatchLock(matchId, () -> transactionTemplate
@@ -84,6 +89,7 @@ public class ApplicationService {
                 .toList();
     }
 
+    @CacheEvict(value = "matchDetail", key = "#matchId")
     public void updateApplicationStatus(Long matchId, Long applicationId, Long memberId, ApplicationStatus status) {
         if (status != ApplicationStatus.APPROVED && status != ApplicationStatus.REJECTED) {
             throw new BadRequestException("신청 상태는 APPROVED 또는 REJECTED만 처리할 수 있습니다.");
@@ -93,15 +99,20 @@ public class ApplicationService {
                 .executeWithoutResult(s -> processApplicationDecision(matchId, applicationId, memberId, status)));
     }
 
-    protected void processApplication(Long matchId, Long userId) {
+    protected void processApplication(Long matchId, Long userId, Position position) {
         MatchEntity match = getMatch(matchId);
 
         if (match.getMatchDate() != null && match.getMatchDate().isBefore(LocalDateTime.now())) {
             throw new ConflictException("이미 종료된 경기에는 신청할 수 없습니다.");
         }
 
-        if (match.getCurrentPlayerCount() >= match.getMaxPlayerCount()) {
-            throw new ConflictException("모집이 마감된 경기입니다.");
+        MatchPositionSlot slot = match.getSlot(position);
+        if (slot == null) {
+            throw new BadRequestException("해당 포지션은 모집하지 않습니다.");
+        }
+
+        if (!slot.isAvailable()) {
+            throw new ConflictException("해당 포지션 모집이 마감되었습니다.");
         }
 
         if (match.getMember() != null && Objects.equals(match.getMember().getId(), userId)) {
@@ -115,10 +126,11 @@ public class ApplicationService {
         ApplicationEntity application = ApplicationEntity.builder()
                 .match(match)
                 .userId(userId)
+                .position(position)
                 .build();
 
         applicationRepository.save(application);
-        match.increasePlayerCount();
+
     }
 
     protected void processApplicationDecision(Long matchId, Long applicationId, Long memberId,
@@ -132,11 +144,15 @@ public class ApplicationService {
         }
 
         if (status == ApplicationStatus.APPROVED) {
-            if (match.getCurrentPlayerCount() >= match.getMaxPlayerCount()) {
-                throw new ConflictException("모집이 마감된 매치입니다.");
+            MatchPositionSlot slot = match.getSlot(application.getPosition());
+            if (slot == null || !slot.isAvailable()) {
+                throw new ConflictException("해당 포지션 모집이 마감된 매치입니다.");
             }
             application.approve();
-            match.increasePlayerCount();
+            slot.increaseFilled();
+            if (match.isFullyBooked()) {
+                match.close();
+            }
             return;
         }
 
@@ -153,6 +169,7 @@ public class ApplicationService {
         }
 
         application.cancel();
+
     }
 
     private void executeWithMatchLock(Long matchId, Runnable action) {

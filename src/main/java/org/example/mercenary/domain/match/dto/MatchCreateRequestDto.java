@@ -2,11 +2,12 @@ package org.example.mercenary.domain.match.dto;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.Max;
-import jakarta.validation.constraints.Min;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import java.time.LocalDateTime;
+import java.util.List;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -49,14 +50,8 @@ public class MatchCreateRequestDto {
     @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm")
     private LocalDateTime matchDate;
 
-    @Schema(description = "최대 인원", example = "10")
-    @NotNull(message = "최대 인원을 입력해 주세요.")
-    @Min(value = 2, message = "최대 인원은 2명 이상이어야 합니다.")
-    @Max(value = 22, message = "최대 인원은 22명 이하여야 합니다.")
-    private Integer maxPlayerCount;
-
-    @Schema(description = "현재 인원", example = "6")
-    @NotNull(message = "현재 인원을 입력해 주세요.")
-    @Min(value = 1, message = "현재 인원은 1명 이상이어야 합니다.")
-    private Integer currentPlayerCount;
+    @Schema(description = "포지션별 모집 슬롯 목록")
+    @NotEmpty(message = "포지션 슬롯을 하나 이상 입력해 주세요.")
+    @Valid
+    private List<PositionSlotDto> slots;
 }

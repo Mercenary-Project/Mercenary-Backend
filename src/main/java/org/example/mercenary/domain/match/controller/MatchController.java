@@ -28,6 +28,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @Slf4j
@@ -59,10 +60,13 @@ public class MatchController {
                 .body(ApiResponseDto.success("매치가 성공적으로 생성되었습니다.", matchId));
     }
 
-    @Operation(summary = "전체 매치 조회", description = "현재 조회 가능한 경기 게시글 목록을 반환합니다. 지난 경기는 제외됩니다.")
+    @Operation(summary = "전체 매치 조회", description = "현재 조회 가능한 경기 게시글 목록을 페이지 단위로 반환합니다. 지난 경기는 제외됩니다.")
     @GetMapping
-    public ResponseEntity<ApiResponseDto<List<MatchSearchResponseDto>>> getAllMatches() {
-        List<MatchSearchResponseDto> results = matchService.getAllMatches();
+    public ResponseEntity<ApiResponseDto<List<MatchSearchResponseDto>>> getAllMatches(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        List<MatchSearchResponseDto> results = matchService.getAllMatches(page, size);
         return ResponseEntity.ok(ApiResponseDto.success("전체 매치 조회 성공", results));
     }
 

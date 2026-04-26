@@ -15,10 +15,14 @@ import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.example.mercenary.domain.application.repository.ApplicationRepository;
+import org.example.mercenary.domain.common.Position;
 import org.example.mercenary.domain.match.dto.MatchCreateRequestDto;
 import org.example.mercenary.domain.match.dto.MatchSearchRequestDto;
 import org.example.mercenary.domain.match.dto.MatchUpdateRequestDto;
+import org.example.mercenary.domain.match.dto.PositionSlotDto;
 import org.example.mercenary.domain.match.entity.MatchEntity;
 import org.example.mercenary.domain.match.repository.MatchRepository;
 import org.example.mercenary.domain.member.entity.MemberEntity;
@@ -31,7 +35,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -65,9 +68,9 @@ class MatchServiceTest {
     }
 
     @Test
-    @DisplayName("Reject create when current player count is less than one")
-    void shouldRejectWhenCurrentPlayerCountLessThanOne() {
-        MatchCreateRequestDto request = createRequest(10, 0);
+    @DisplayName("Reject create when slots are empty")
+    void shouldRejectWhenSlotsEmpty() {
+        MatchCreateRequestDto request = createRequest(List.of());
 
         assertThatThrownBy(() -> matchService.createMatch(request, 1L))
                 .isInstanceOf(BadRequestException.class);
@@ -77,9 +80,22 @@ class MatchServiceTest {
     }
 
     @Test
+    @DisplayName("Reject create when duplicate positions in slots")
+    void shouldRejectWhenDuplicatePositions() {
+        PositionSlotDto slot1 = createSlotDto(Position.GK, 1);
+        PositionSlotDto slot2 = createSlotDto(Position.GK, 2);
+        MatchCreateRequestDto request = createRequest(List.of(slot1, slot2));
+
+        assertThatThrownBy(() -> matchService.createMatch(request, 1L))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
     @DisplayName("Create match and register location when request is valid")
     void shouldCreateMatchWhenRequestValid() {
-        MatchCreateRequestDto request = createRequest(10, 1);
+        PositionSlotDto gkSlot = createSlotDto(Position.GK, 1);
+        PositionSlotDto stSlot = createSlotDto(Position.ST, 2);
+        MatchCreateRequestDto request = createRequest(List.of(gkSlot, stSlot));
         MemberEntity member = createMember(1L);
 
         given(memberRepository.findById(1L)).willReturn(Optional.of(member));
@@ -92,22 +108,7 @@ class MatchServiceTest {
         Long matchId = matchService.createMatch(request, 1L);
 
         assertThat(matchId).isEqualTo(77L);
-
-        ArgumentCaptor<MatchEntity> entityCaptor = ArgumentCaptor.forClass(MatchEntity.class);
-        then(matchRepository).should().save(entityCaptor.capture());
-        assertThat(entityCaptor.getValue().getCurrentPlayerCount()).isEqualTo(1);
-        assertThat(entityCaptor.getValue().getMaxPlayerCount()).isEqualTo(10);
-
         then(matchLocationService).should().addMatchLocation(77L, 127.0, 37.5);
-    }
-
-    @Test
-    @DisplayName("Reject create when current player count exceeds max")
-    void shouldRejectWhenCurrentPlayerCountExceedsMax() {
-        MatchCreateRequestDto request = createRequest(5, 6);
-
-        assertThatThrownBy(() -> matchService.createMatch(request, 1L))
-                .isInstanceOf(BadRequestException.class);
     }
 
     @Test
@@ -123,8 +124,6 @@ class MatchServiceTest {
                 .latitude(37.5)
                 .longitude(127.0)
                 .matchDate(LocalDateTime.of(2030, 1, 2, 10, 0))
-                .maxPlayerCount(10)
-                .currentPlayerCount(3)
                 .build();
         MatchEntity olderMatch = MatchEntity.builder()
                 .id(9L)
@@ -136,8 +135,6 @@ class MatchServiceTest {
                 .latitude(37.5)
                 .longitude(127.0)
                 .matchDate(LocalDateTime.of(2030, 1, 1, 10, 0))
-                .maxPlayerCount(10)
-                .currentPlayerCount(2)
                 .build();
 
         given(matchRepository.findAllByMemberIdOrderByMatchDateDesc(7L)).willReturn(List.of(newerMatch, olderMatch));
@@ -162,8 +159,6 @@ class MatchServiceTest {
                 .latitude(37.5)
                 .longitude(127.0)
                 .matchDate(LocalDateTime.of(2025, 12, 31, 23, 0))
-                .maxPlayerCount(10)
-                .currentPlayerCount(3)
                 .build();
         MatchEntity visibleMatch = MatchEntity.builder()
                 .id(2L)
@@ -175,13 +170,12 @@ class MatchServiceTest {
                 .latitude(37.5)
                 .longitude(127.0)
                 .matchDate(LocalDateTime.of(2026, 1, 2, 10, 0))
-                .maxPlayerCount(10)
-                .currentPlayerCount(3)
                 .build();
 
-        given(matchRepository.findAll()).willReturn(List.of(expiredMatch, visibleMatch));
+        given(matchRepository.findAll(any(Pageable.class)))
+                .willReturn(new PageImpl<>(List.of(expiredMatch, visibleMatch)));
 
-        var result = matchService.getAllMatches();
+        var result = matchService.getAllMatches(0, 20);
 
         assertThat(result).hasSize(1);
         assertThat(result.get(0).getMatchId()).isEqualTo(2L);
@@ -201,11 +195,9 @@ class MatchServiceTest {
         MatchEntity match = createMatch(20L, member);
         given(matchRepository.findById(20L)).willReturn(Optional.of(match));
 
-        matchService.updateMatch(20L, createUpdateRequest(12, 4), 1L);
+        matchService.updateMatch(20L, createUpdateRequest(), 1L);
 
         assertThat(match.getTitle()).isEqualTo("updated match");
-        assertThat(match.getCurrentPlayerCount()).isEqualTo(4);
-        assertThat(match.getMaxPlayerCount()).isEqualTo(12);
         then(matchLocationService).should().updateMatchLocation(20L, 128.0, 36.5);
     }
 
@@ -241,8 +233,6 @@ class MatchServiceTest {
                 .latitude(37.5)
                 .longitude(127.0)
                 .matchDate(LocalDateTime.of(2025, 12, 31, 23, 0))
-                .maxPlayerCount(10)
-                .currentPlayerCount(3)
                 .build();
         MatchEntity visibleMatch = MatchEntity.builder()
                 .id(2L)
@@ -254,8 +244,6 @@ class MatchServiceTest {
                 .latitude(37.5)
                 .longitude(127.0)
                 .matchDate(LocalDateTime.of(2026, 1, 2, 10, 0))
-                .maxPlayerCount(10)
-                .currentPlayerCount(3)
                 .build();
 
         given(matchLocationService.findNearbyMatchIds(127.0, 37.5, 5.0)).willReturn(Map.of(1L, 1.0, 2L, 2.0));
@@ -282,8 +270,6 @@ class MatchServiceTest {
                 .latitude(37.5)
                 .longitude(127.0)
                 .matchDate(LocalDateTime.of(2025, 1, 1, 10, 0))
-                .maxPlayerCount(10)
-                .currentPlayerCount(3)
                 .build();
 
         LocalDateTime threshold = LocalDateTime.of(2026, 1, 1, 0, 0);
@@ -310,8 +296,6 @@ class MatchServiceTest {
                 .latitude(37.5)
                 .longitude(127.0)
                 .matchDate(LocalDateTime.of(2025, 12, 31, 23, 0))
-                .maxPlayerCount(10)
-                .currentPlayerCount(3)
                 .build();
 
         given(matchRepository.findById(50L)).willReturn(Optional.of(expiredMatch));
@@ -327,11 +311,11 @@ class MatchServiceTest {
         MatchEntity match = createMatch(40L, owner);
         given(matchRepository.findById(40L)).willReturn(Optional.of(match));
 
-        assertThatThrownBy(() -> matchService.updateMatch(40L, createUpdateRequest(12, 4), 999L))
+        assertThatThrownBy(() -> matchService.updateMatch(40L, createUpdateRequest(), 999L))
                 .isInstanceOf(ForbiddenException.class);
     }
 
-    private MatchCreateRequestDto createRequest(int maxPlayerCount, int currentPlayerCount) {
+    private MatchCreateRequestDto createRequest(List<PositionSlotDto> slots) {
         MatchCreateRequestDto request = new MatchCreateRequestDto();
         request.setTitle("match");
         request.setContent("content");
@@ -341,12 +325,11 @@ class MatchServiceTest {
         request.setLatitude(37.5);
         request.setLongitude(127.0);
         request.setMatchDate(LocalDateTime.of(2030, 1, 1, 10, 0));
-        request.setMaxPlayerCount(maxPlayerCount);
-        request.setCurrentPlayerCount(currentPlayerCount);
+        request.setSlots(slots);
         return request;
     }
 
-    private MatchUpdateRequestDto createUpdateRequest(int maxPlayerCount, int currentPlayerCount) {
+    private MatchUpdateRequestDto createUpdateRequest() {
         MatchUpdateRequestDto request = new MatchUpdateRequestDto();
         request.setTitle("updated match");
         request.setContent("updated content");
@@ -356,9 +339,15 @@ class MatchServiceTest {
         request.setLatitude(36.5);
         request.setLongitude(128.0);
         request.setMatchDate(LocalDateTime.of(2031, 1, 1, 10, 0));
-        request.setMaxPlayerCount(maxPlayerCount);
-        request.setCurrentPlayerCount(currentPlayerCount);
+        request.setSlots(List.of(createSlotDto(Position.GK, 1), createSlotDto(Position.ST, 2)));
         return request;
+    }
+
+    private PositionSlotDto createSlotDto(Position position, int required) {
+        PositionSlotDto dto = new PositionSlotDto();
+        dto.setPosition(position);
+        dto.setRequired(required);
+        return dto;
     }
 
     private MemberEntity createMember(Long id) {
@@ -384,8 +373,6 @@ class MatchServiceTest {
                 .latitude(37.5)
                 .longitude(127.0)
                 .matchDate(LocalDateTime.of(2030, 1, 1, 10, 0))
-                .maxPlayerCount(10)
-                .currentPlayerCount(3)
                 .build();
     }
 }

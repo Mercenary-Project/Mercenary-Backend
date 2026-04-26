@@ -18,6 +18,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.example.mercenary.domain.common.Position;
 import org.example.mercenary.domain.match.entity.MatchEntity;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
@@ -43,6 +44,10 @@ public class ApplicationEntity {
 
     @Column(nullable = false)
     private Long userId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private Position position;
 
     @Enumerated(EnumType.STRING)
     private ApplicationStatus status;

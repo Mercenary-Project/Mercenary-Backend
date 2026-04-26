@@ -1,35 +1,36 @@
 import http from 'k6/http';
 import { check, sleep, group } from 'k6';
 import { Counter, Rate, Trend } from 'k6/metrics';
+import { htmlReport } from "https://raw.githubusercontent.com/benc-uk/k6-reporter/main/dist/bundle.js";
+import { textSummary } from "https://jslib.k6.io/k6-summary/0.0.2/index.js";
 
 // ─── 커스텀 메트릭 (ASCII 이름 사용 필수) ──────────────────────
-const matchCreateDuration = new Trend('match_create_duration', true);
 const matchListDuration   = new Trend('match_list_duration', true);
 const matchApplyDuration  = new Trend('match_apply_duration', true);
 const errorRate           = new Rate('error_rate');
 
 // ─── 설정 ────────────────────────────────────────────────────
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
-const VU_COUNT = 50;
+const VU_COUNT = 200;
 
 export const options = {
   scenarios: {
-    load_test: {
+    load: {
       executor: 'ramping-vus',
       startVUs: 0,
       stages: [
-        { duration: '15s', target: 10 },   // 초기 부하: 0 → 10 VU
-        { duration: '30s', target: VU_COUNT },  // 램프업: 10 → 50 VU
-        { duration: '1m',  target: VU_COUNT },  // 유지: 50 VU
-        { duration: '15s', target: 0 },    // 종료: 50 → 0 VU
+        { duration: '30s', target: 50  },  // 워밍업: 0 → 50 VU
+        { duration: '30s', target: VU_COUNT },  // 램프업: 50 → 200 VU
+        { duration: '1m',  target: VU_COUNT },  // 유지: 200 VU
+        { duration: '20s', target: 0 },    // 종료: 200 → 0 VU
       ],
       gracefulRampDown: '10s',
     },
   },
   thresholds: {
     'http_req_duration':       ['p(95)<3000'],   // 전체 응답 3초 이내
-    'http_req_duration{name:매치_목록_조회}':  ['p(95)<1000'],   
-    'http_req_duration{name:매치_신청}': ['p(95)<2000'],   
+    'http_req_duration{name:매치_목록_조회}':  ['p(95)<1000'],
+    'http_req_duration{name:매치_신청}': ['p(95)<2000'],
     'error_rate':              ['rate<0.15'],     // 에러율 15% 미만
   },
 };
@@ -114,7 +115,7 @@ export default function (data) {
 
   // ── 시나리오 1: 매치 목록 조회 ─────────────────────────────
   group('매치 목록 조회', () => {
-    const res = http.get(`${BASE_URL}/api/matches`, {
+    const res = http.get(`${BASE_URL}/api/matches?page=0&size=20`, {
       headers,
       tags: { name: '매치_목록_조회' },
     });
@@ -160,9 +161,6 @@ export default function (data) {
 
   sleep(1);
 }
-
-import { htmlReport } from "https://raw.githubusercontent.com/benc-uk/k6-reporter/main/dist/bundle.js";
-import { textSummary } from "https://jslib.k6.io/k6-summary/0.0.2/index.js";
 
 // ─── Teardown: 결과 요약 ─────────────────────────────────────
 export function teardown(data) {

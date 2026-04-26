@@ -2,6 +2,7 @@ package org.example.mercenary.domain.match.entity;
 
 import jakarta.persistence.Access;
 import jakarta.persistence.AccessType;
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -12,25 +13,27 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import lombok.AccessLevel;
-import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.example.mercenary.domain.common.Position;
 import org.example.mercenary.domain.match.dto.MatchCreateRequestDto;
 import org.example.mercenary.domain.match.dto.MatchUpdateRequestDto;
+import org.example.mercenary.domain.match.dto.PositionSlotDto;
 import org.example.mercenary.domain.member.entity.MemberEntity;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "matches")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@AllArgsConstructor
-@Builder
 @Access(AccessType.FIELD)
 public class MatchEntity {
 
@@ -58,12 +61,6 @@ public class MatchEntity {
     @Column(nullable = false)
     private LocalDateTime matchDate;
 
-    @Column(nullable = false)
-    private int maxPlayerCount;
-
-    @Column(nullable = false)
-    private int currentPlayerCount;
-
     private double latitude;
     private double longitude;
     private String fullAddress;
@@ -74,10 +71,39 @@ public class MatchEntity {
     private int viewCount;
     private int chatCount;
 
+    // DB 호환 컬럼 — 포지션 슬롯으로 전환 후 미사용, 기존 스키마 NOT NULL 제약 유지용
+    @Column(nullable = false)
+    private int maxPlayerCount;
+
+    @Column(nullable = false)
+    private int currentPlayerCount;
+
+    @OneToMany(mappedBy = "match", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    private List<MatchPositionSlot> slots = new ArrayList<>();
+
+    @Builder
+    public MatchEntity(Long id, MemberEntity member, String title, String content, String placeName,
+                       String district, LocalDateTime matchDate, double latitude, double longitude,
+                       String fullAddress, MatchStatus status, int viewCount, int chatCount) {
+        this.id = id;
+        this.member = member;
+        this.title = title;
+        this.content = content;
+        this.placeName = placeName;
+        this.district = district;
+        this.matchDate = matchDate;
+        this.latitude = latitude;
+        this.longitude = longitude;
+        this.fullAddress = fullAddress;
+        this.status = status;
+        this.viewCount = viewCount;
+        this.chatCount = chatCount;
+        this.slots = new ArrayList<>();
+    }
+
     @PrePersist
     public void prePersist() {
         this.status = (this.status == null) ? MatchStatus.RECRUITING : this.status;
-        this.currentPlayerCount = (this.currentPlayerCount == 0) ? 1 : this.currentPlayerCount;
     }
 
     public static MatchEntity from(MatchCreateRequestDto request, MemberEntity member) {
@@ -88,19 +114,28 @@ public class MatchEntity {
                 .placeName(request.getPlaceName())
                 .district(request.getDistrict())
                 .matchDate(request.getMatchDate())
-                .maxPlayerCount(request.getMaxPlayerCount())
-                .currentPlayerCount(request.getCurrentPlayerCount())
                 .latitude(request.getLatitude())
                 .longitude(request.getLongitude())
                 .fullAddress(request.getFullAddress())
                 .build();
     }
 
-    public void increasePlayerCount() {
-        this.currentPlayerCount++;
-        if (this.currentPlayerCount >= this.maxPlayerCount) {
-            this.status = MatchStatus.CLOSED;
+    public boolean isFullyBooked() {
+        if (slots.isEmpty()) {
+            return false;
         }
+        return slots.stream().noneMatch(MatchPositionSlot::isAvailable);
+    }
+
+    public MatchPositionSlot getSlot(Position position) {
+        return slots.stream()
+                .filter(slot -> slot.getPosition() == position)
+                .findFirst()
+                .orElse(null);
+    }
+
+    public void close() {
+        this.status = MatchStatus.CLOSED;
     }
 
     public void update(MatchUpdateRequestDto request) {
@@ -109,13 +144,15 @@ public class MatchEntity {
         this.placeName = request.getPlaceName();
         this.district = request.getDistrict();
         this.matchDate = request.getMatchDate();
-        this.maxPlayerCount = request.getMaxPlayerCount();
-        this.currentPlayerCount = request.getCurrentPlayerCount();
         this.latitude = request.getLatitude();
         this.longitude = request.getLongitude();
         this.fullAddress = request.getFullAddress();
-        this.status = this.currentPlayerCount >= this.maxPlayerCount
-                ? MatchStatus.CLOSED
-                : MatchStatus.RECRUITING;
+    }
+
+    public void updateSlots(List<PositionSlotDto> slotDtos) {
+        this.slots.clear();
+        for (PositionSlotDto dto : slotDtos) {
+            this.slots.add(MatchPositionSlot.of(this, dto.getPosition(), dto.getRequired()));
+        }
     }
 }
