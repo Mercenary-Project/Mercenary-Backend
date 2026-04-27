@@ -66,19 +66,21 @@ jobs:
           fi
 
           echo "Waiting for app to start (max 3 min)..."
-          for i in $(seq 1 18); do
+          # 💡 \$ 기호를 사용하여 GitHub가 아닌 EC2 서버에서 변수를 계산하도록 수정
+          for i in \$(seq 1 18); do
             if curl -sf http://localhost:8080/actuator/health > /dev/null; then
               echo "App is healthy"
               break
             fi
-            if [ "$i" -eq 18 ]; then
+            if [ "\$i" -eq 18 ]; then
               echo "App failed to start within 3 minutes"
-              docker compose --env-file .env.prod -f docker-compose.prod.yml logs app --tail=50 2>/dev/null || \
-                docker-compose --env-file .env.prod -f docker-compose.prod.yml logs app --tail=50 2>/dev/null
+              # 💡 줄바꿈으로 인한 문법 에러 방지를 위해 한 줄로 통합하고, 실패 원인을 볼 수 있게 2>/dev/null 제거
+              docker compose --env-file .env.prod -f docker-compose.prod.yml logs app --tail=50 || docker-compose --env-file .env.prod -f docker-compose.prod.yml logs app --tail=50
               exit 1
             fi
-            echo "Attempt $i/18, retrying in 10s..."
+            echo "Attempt \$i/18, retrying in 10s..."
             sleep 10
           done
-          curl -f http://localhost:8080/actuator/health
+          
+          echo "Deployment successful!"
           EOF
