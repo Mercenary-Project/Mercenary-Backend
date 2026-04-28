@@ -26,7 +26,7 @@ public class MatchSearchResponseDto {
     private final Double latitude;
     private final Double longitude;
     private final List<PositionSlotResponseDto> slots;
-    private final boolean isFullyBooked;
+    private final boolean fullyBooked;
 
     public static MatchSearchResponseDto from(MatchEntity match, Double distance) {
         return MatchSearchResponseDto.builder()
@@ -43,7 +43,7 @@ public class MatchSearchResponseDto {
                 .slots(match.getSlots().stream()
                         .map(PositionSlotResponseDto::from)
                         .collect(Collectors.toList()))
-                .isFullyBooked(match.isFullyBooked())
+                .fullyBooked(match.isFullyBooked())
                 .build();
     }
 }

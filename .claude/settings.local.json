@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell($loginRes = Invoke-RestMethod -Uri \"http://localhost:8080/api/auth/dev-login\" -Method POST -ContentType \"application/json\" -Body '{\"kakaoId\": 99997, \"nickname\": \"진단2\"}'; $token = $loginRes.data.accessToken; $headers = @{ \"Authorization\" = \"Bearer $token\"; \"Content-Type\" = \"application/json\" }; try { $res = Invoke-RestMethod -Uri \"http://localhost:8080/api/matches?page=0&size=20\" -Headers $headers -Method GET; $res | ConvertTo-Json -Depth 2 | Write-Host } catch { $status = $_.Exception.Response.StatusCode.value__; $stream = $_.Exception.Response.GetResponseStream\\(\\); $reader = New-Object System.IO.StreamReader\\($stream\\); $body = $reader.ReadToEnd\\(\\); Write-Host \"Status: $status\"; Write-Host \"Body: $body\" })"
+    ]
+  }
+}
