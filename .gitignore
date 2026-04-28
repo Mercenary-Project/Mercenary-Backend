@@ -41,5 +41,6 @@ out/
 .gradle-home/
 
 CLAUDE.md
+k6/CLAUDE.md
 codex_rq.md
 Repact.md

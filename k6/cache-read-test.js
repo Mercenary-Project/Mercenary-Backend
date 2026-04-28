@@ -86,11 +86,12 @@ export function setup() {
         placeName: `테스트 구장 ${i + 1}`,
         district: '강남구',
         matchDate: matchDate,
-        maxPlayerCount: 22,
-        currentPlayerCount: 1,
         latitude: 37.5172 + i * 0.0001,
         longitude: 127.0473 + i * 0.0001,
         fullAddress: `서울특별시 강남구 테스트로 ${i + 1}`,
+        slots: [
+          { position: 'ST', required: 20 },
+        ],
       }),
       { headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${creatorToken}` } }
     );

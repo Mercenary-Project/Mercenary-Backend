@@ -70,11 +70,15 @@ export function setup() {
         placeName: `테스트 구장 ${i + 1}`,
         district: '강남구',
         matchDate: matchDate,
-        maxPlayerCount: 22,
-        currentPlayerCount: 1,
         latitude: 37.5172 + i * 0.01,
         longitude: 127.0473 + i * 0.01,
         fullAddress: `서울특별시 강남구 테스트로 ${i + 1}`,
+        slots: [
+          { position: 'GK',  required: 2 },
+          { position: 'CB',  required: 4 },
+          { position: 'CM',  required: 6 },
+          { position: 'ST',  required: 4 },
+        ],
       }),
       { headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${creatorToken}` } }
     );
@@ -122,7 +126,7 @@ export default function (data) {
 
     const success = check(res, { '조회 성공 (200)': (r) => r.status === 200 });
     errorRate.add(!success);
-    matchListDuration.add(res.timings.duration);
+    matchListDuration.add(res.timings.waiting);
   });
 
   sleep(0.5);
@@ -146,17 +150,20 @@ export default function (data) {
   group('매치 신청', () => {
     const matchId = matchIds[Math.floor(Math.random() * matchIds.length)];
     if (!matchId) return;
-    const res = http.post(`${BASE_URL}/api/matches/${matchId}/apply`, null, {
-      headers,
-      tags: { name: '매치_신청' },
-    });
+    const res = http.post(`${BASE_URL}/api/matches/${matchId}/apply`,
+      JSON.stringify({ position: 'ST' }),
+      {
+        headers,
+        tags: { name: '매치_신청' },
+      }
+    );
 
     // 200(성공) 또는 409(중복/마감) 모두 정상 응답
     const success = check(res, {
       '신청 응답 정상 (200 or 409)': (r) => r.status === 200 || r.status === 409,
     });
     errorRate.add(!success);
-    matchApplyDuration.add(res.timings.duration);
+    matchApplyDuration.add(res.timings.waiting);
   });
 
   sleep(1);
