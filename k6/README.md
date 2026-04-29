@@ -85,7 +85,7 @@ k6 run --out influxdb=http://localhost:8086/k6 k6/load-test.js
 k6 run --out influxdb=http://localhost:8086/k6 k6/cache-read-test.js
 ```
 
-> **주의:** setup 단계에서 매치 600개를 순차 생성하므로 테스트 시작까지 약 3-5분 소요됩니다.
+> **주의:** setup 단계에서 매치 1000개를 순차 생성하므로 테스트 시작까지 약 3-5분 소요됩니다.
 
 **테스트 구조 (Miss vs Hit 비교):**
 

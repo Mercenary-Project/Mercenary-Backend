@@ -1,8 +1,11 @@
 package org.example.mercenary.global.config;
 
+import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import org.example.mercenary.domain.match.dto.MatchDetailResponseDto;
+import org.example.mercenary.domain.match.dto.MatchSearchResponseDto;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.annotation.Bean;
@@ -11,12 +14,13 @@ import org.springframework.context.annotation.Primary;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
-import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
+import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
 import java.time.Duration;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @EnableCaching
@@ -30,35 +34,40 @@ public class RedisCacheConfig {
     @Primary
     @Bean
     public CacheManager cacheManager(RedisConnectionFactory connectionFactory) {
-        // LocalDateTime 직렬화를 위한 ObjectMapper 설정
         ObjectMapper objectMapper = new ObjectMapper();
         objectMapper.registerModule(new JavaTimeModule());
-        objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS); // ISO-8601 형식으로 저장
-        
-        // 역직렬화 시 구체 타입 복원에 필요한 최소 타입 정보만 포함
-        // EVERYTHING → NON_FINAL: Long/Integer/Double/String 등 final 클래스는 타입 메타데이터 제외
-        // 1,000개 목록 캐시 기준 JSON 크기 약 3~5배 감소 → p95 응답시간 단축
-        objectMapper.activateDefaultTyping(
-                objectMapper.getPolymorphicTypeValidator(),
-                ObjectMapper.DefaultTyping.NON_FINAL,
-                com.fasterxml.jackson.annotation.JsonTypeInfo.As.PROPERTY
-        );
+        objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        // activateDefaultTyping 제거: @class 메타데이터 없이 순수 JSON으로 저장
+        // 대신 캐시별 Jackson2JsonRedisSerializer로 타입 명시 → 직렬화 크기 감소 → Hit 속도 향상
 
-        GenericJackson2JsonRedisSerializer serializer = new GenericJackson2JsonRedisSerializer(objectMapper);
+        StringRedisSerializer keySerializer = new StringRedisSerializer();
 
-        // 기본 설정: 1시간 뒤 만료, JSON 직렬화
+        // "matches" 캐시: List<MatchSearchResponseDto> 타입 명시
+        JavaType matchListType = objectMapper.getTypeFactory()
+                .constructCollectionType(List.class, MatchSearchResponseDto.class);
+        Jackson2JsonRedisSerializer<?> matchesSerializer =
+                new Jackson2JsonRedisSerializer<>(objectMapper, matchListType);
+        RedisCacheConfiguration matchesConfig = RedisCacheConfiguration.defaultCacheConfig()
+                .entryTtl(Duration.ofMinutes(10))
+                .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(keySerializer))
+                .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(matchesSerializer));
+
+        // "matchDetail" 캐시: MatchDetailResponseDto 타입 명시
+        Jackson2JsonRedisSerializer<MatchDetailResponseDto> detailSerializer =
+                new Jackson2JsonRedisSerializer<>(objectMapper, MatchDetailResponseDto.class);
+        RedisCacheConfiguration detailConfig = RedisCacheConfiguration.defaultCacheConfig()
+                .entryTtl(Duration.ofHours(1))
+                .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(keySerializer))
+                .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(detailSerializer));
+
+        Map<String, RedisCacheConfiguration> configurations = new HashMap<>();
+        configurations.put("matches", matchesConfig);
+        configurations.put("matchDetail", detailConfig);
+
+        // 기본 설정 (향후 캐시 추가 대비)
         RedisCacheConfiguration defaultConfig = RedisCacheConfiguration.defaultCacheConfig()
                 .entryTtl(Duration.ofHours(1))
-                .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
-                .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(serializer));
-
-        // 캐시별 개별 설정
-        Map<String, RedisCacheConfiguration> configurations = new HashMap<>();
-        
-        // 매치 목록은 10분마다 갱신되도록 짧게 설정 (예시)
-        configurations.put("matches", defaultConfig.entryTtl(Duration.ofMinutes(10)));
-        // 매치 상세 정보는 1시간 유지
-        configurations.put("matchDetail", defaultConfig.entryTtl(Duration.ofHours(1)));
+                .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(keySerializer));
 
         return RedisCacheManager.builder(connectionFactory)
                 .cacheDefaults(defaultConfig)

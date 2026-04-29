@@ -4,13 +4,15 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 import org.example.mercenary.domain.common.Position;
 import org.example.mercenary.domain.match.entity.MatchPositionSlot;
 
 @Getter
+@Setter
 @Builder
-@NoArgsConstructor  // 👈 추가: Redis(Jackson) 역직렬화를 위한 기본 생성자
-@AllArgsConstructor // 👈 추가: @Builder가 정상 작동하기 위해 필요한 생성자
+@NoArgsConstructor
+@AllArgsConstructor
 
 public class PositionSlotResponseDto {
 
