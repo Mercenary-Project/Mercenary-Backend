@@ -7,7 +7,10 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.lenient;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
@@ -60,11 +63,17 @@ class ApplicationServiceUnitTest {
     @Mock
     private TransactionTemplate transactionTemplate;
 
+    @Mock
+    private Clock appClock;
+
     @InjectMocks
     private ApplicationService applicationService;
 
     @BeforeEach
     void setUpTransactionTemplate() {
+        lenient().when(appClock.instant()).thenReturn(Instant.now());
+        lenient().when(appClock.getZone()).thenReturn(ZoneId.systemDefault());
+
         // 일부 테스트는 transactionTemplate을 호출하지 않으므로 lenient로 설정
         lenient().doAnswer(invocation -> {
             Consumer<TransactionStatus> action = invocation.getArgument(0);

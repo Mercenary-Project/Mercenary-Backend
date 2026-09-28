@@ -68,6 +68,10 @@ public class MatchEntity {
     @Enumerated(EnumType.STRING)
     private MatchStatus status;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private ApprovalPolicy approvalPolicy;
+
     private int viewCount;
     private int chatCount;
 
@@ -84,7 +88,7 @@ public class MatchEntity {
     @Builder
     public MatchEntity(Long id, MemberEntity member, String title, String content, String placeName,
                        String district, LocalDateTime matchDate, double latitude, double longitude,
-                       String fullAddress, MatchStatus status, int viewCount, int chatCount) {
+                       String fullAddress, MatchStatus status, ApprovalPolicy approvalPolicy, int viewCount, int chatCount) {
         this.id = id;
         this.member = member;
         this.title = title;
@@ -96,6 +100,7 @@ public class MatchEntity {
         this.longitude = longitude;
         this.fullAddress = fullAddress;
         this.status = status;
+        this.approvalPolicy = approvalPolicy;
         this.viewCount = viewCount;
         this.chatCount = chatCount;
         this.slots = new ArrayList<>();
@@ -104,6 +109,7 @@ public class MatchEntity {
     @PrePersist
     public void prePersist() {
         this.status = (this.status == null) ? MatchStatus.RECRUITING : this.status;
+        this.approvalPolicy = (this.approvalPolicy == null) ? ApprovalPolicy.HOST_APPROVAL : this.approvalPolicy;
     }
 
     public static MatchEntity from(MatchCreateRequestDto request, MemberEntity member) {
@@ -117,6 +123,7 @@ public class MatchEntity {
                 .latitude(request.getLatitude())
                 .longitude(request.getLongitude())
                 .fullAddress(request.getFullAddress())
+                .approvalPolicy(request.getApprovalPolicy())
                 .build();
     }
 
@@ -154,5 +161,16 @@ public class MatchEntity {
         for (PositionSlotDto dto : slotDtos) {
             this.slots.add(MatchPositionSlot.of(this, dto.getPosition(), dto.getRequired()));
         }
+    }
+
+    public boolean hasSameSlotConfiguration(List<PositionSlotDto> slotDtos) {
+        if (slots.size() != slotDtos.size()) {
+            return false;
+        }
+
+        return slotDtos.stream().allMatch(dto -> {
+            MatchPositionSlot slot = getSlot(dto.getPosition());
+            return slot != null && slot.getRequired() == dto.getRequired();
+        });
     }
 }

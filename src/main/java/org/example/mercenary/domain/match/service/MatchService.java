@@ -23,6 +23,7 @@ import org.example.mercenary.domain.match.repository.MatchRepository;
 import org.example.mercenary.domain.member.entity.MemberEntity;
 import org.example.mercenary.domain.member.repository.MemberRepository;
 import org.example.mercenary.global.exception.BadRequestException;
+import org.example.mercenary.global.exception.ConflictException;
 import org.example.mercenary.global.exception.ForbiddenException;
 import org.example.mercenary.global.exception.NotFoundException;
 import org.springframework.cache.annotation.CacheEvict;
@@ -135,7 +136,12 @@ public class MatchService {
 
         MatchEntity match = getOwnedMatch(matchId, memberId);
         match.update(request);
-        match.updateSlots(request.getSlots());
+        if (!match.hasSameSlotConfiguration(request.getSlots())) {
+            if (applicationRepository.existsByMatch(match)) {
+                throw new ConflictException("신청자가 있는 매치의 포지션 정원은 변경할 수 없습니다.");
+            }
+            match.updateSlots(request.getSlots());
+        }
         matchLocationService.updateMatchLocation(matchId, request.getLongitude(), request.getLatitude());
     }
 

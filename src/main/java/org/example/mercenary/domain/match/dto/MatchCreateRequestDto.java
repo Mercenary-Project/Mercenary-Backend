@@ -11,6 +11,7 @@ import java.util.List;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.example.mercenary.domain.match.entity.ApprovalPolicy;
 
 @Getter
 @Setter
@@ -54,4 +55,7 @@ public class MatchCreateRequestDto {
     @NotEmpty(message = "포지션 슬롯을 하나 이상 입력해 주세요.")
     @Valid
     private List<PositionSlotDto> slots;
+
+    @Schema(description = "신청 승인 정책", example = "HOST_APPROVAL", allowableValues = {"AUTO_APPROVE", "HOST_APPROVAL"})
+    private ApprovalPolicy approvalPolicy;
 }

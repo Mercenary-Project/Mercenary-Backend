@@ -6,6 +6,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.example.mercenary.domain.match.entity.MatchEntity;
+import org.example.mercenary.domain.match.entity.ApprovalPolicy;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -25,6 +26,7 @@ public class MatchDetailResponseDto {
     private LocalDateTime matchDate;
     private String status;
     private String writerName;
+    private ApprovalPolicy approvalPolicy;
     private List<PositionSlotResponseDto> slots;
     private boolean isFullyBooked;
 
@@ -38,6 +40,7 @@ public class MatchDetailResponseDto {
                 .matchDate(match.getMatchDate())
                 .status(match.getStatus().name())
                 .writerName(match.getMember() != null ? match.getMember().getNickname() : "알 수 없음")
+                .approvalPolicy(match.getApprovalPolicy())
                 .slots(match.getSlots().stream()
                         .map(PositionSlotResponseDto::from)
                         .collect(Collectors.toList()))

@@ -1,5 +1,6 @@
 package org.example.mercenary.domain.application.service;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -17,6 +18,7 @@ import org.example.mercenary.domain.application.repository.ApplicationRepository
 import org.example.mercenary.domain.common.Position;
 import org.example.mercenary.domain.match.entity.MatchEntity;
 import org.example.mercenary.domain.match.entity.MatchPositionSlot;
+import org.example.mercenary.domain.match.entity.ApprovalPolicy;
 import org.example.mercenary.domain.match.repository.MatchRepository;
 import org.example.mercenary.domain.member.entity.MemberEntity;
 import org.example.mercenary.domain.member.repository.MemberRepository;
@@ -41,6 +43,7 @@ public class ApplicationService {
     private final ApplicationRepository applicationRepository;
     private final MemberRepository memberRepository;
     private final TransactionTemplate transactionTemplate;
+    private final Clock appClock;
 
     @CacheEvict(value = "matchDetail", key = "#matchId")
     public void applyMatch(Long matchId, Long userId, Position position) {
@@ -102,7 +105,7 @@ public class ApplicationService {
     protected void processApplication(Long matchId, Long userId, Position position) {
         MatchEntity match = getMatch(matchId);
 
-        if (match.getMatchDate() != null && match.getMatchDate().isBefore(LocalDateTime.now())) {
+        if (isExpired(match)) {
             throw new ConflictException("이미 종료된 경기에는 신청할 수 없습니다.");
         }
 
@@ -131,6 +134,9 @@ public class ApplicationService {
 
         applicationRepository.save(application);
 
+        if (match.getApprovalPolicy() == ApprovalPolicy.AUTO_APPROVE) {
+            reservePositionAndApprove(match, application);
+        }
     }
 
     protected void processApplicationDecision(Long matchId, Long applicationId, Long memberId,
@@ -144,15 +150,7 @@ public class ApplicationService {
         }
 
         if (status == ApplicationStatus.APPROVED) {
-            MatchPositionSlot slot = match.getSlot(application.getPosition());
-            if (slot == null || !slot.isAvailable()) {
-                throw new ConflictException("해당 포지션 모집이 마감된 매치입니다.");
-            }
-            application.approve();
-            slot.increaseFilled();
-            if (match.isFullyBooked()) {
-                match.close();
-            }
+            reservePositionAndApprove(match, application);
             return;
         }
 
@@ -170,6 +168,28 @@ public class ApplicationService {
 
         application.cancel();
 
+    }
+
+    private void reservePositionAndApprove(MatchEntity match, ApplicationEntity application) {
+        if (isExpired(match)) {
+            throw new ConflictException("이미 종료된 경기에는 신청을 승인할 수 없습니다.");
+        }
+
+        MatchPositionSlot slot = match.getSlot(application.getPosition());
+        if (slot == null || !slot.isAvailable()) {
+            throw new ConflictException("해당 포지션 모집이 마감된 매치입니다.");
+        }
+
+        slot.increaseFilled();
+        application.approve();
+
+        if (match.isFullyBooked()) {
+            match.close();
+        }
+    }
+
+    private boolean isExpired(MatchEntity match) {
+        return match.getMatchDate() != null && match.getMatchDate().isBefore(LocalDateTime.now(appClock));
     }
 
     private void executeWithMatchLock(Long matchId, Runnable action) {

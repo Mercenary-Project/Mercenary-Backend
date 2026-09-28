@@ -14,6 +14,8 @@ public interface ApplicationRepository extends JpaRepository<ApplicationEntity, 
 
     boolean existsByMatchAndUserId(MatchEntity match, Long userId);
 
+    boolean existsByMatch(MatchEntity match);
+
     boolean existsByMatchAndUserIdAndPosition(MatchEntity match, Long userId, Position position);
 
     Optional<ApplicationEntity> findByMatchAndUserId(MatchEntity match, Long userId);

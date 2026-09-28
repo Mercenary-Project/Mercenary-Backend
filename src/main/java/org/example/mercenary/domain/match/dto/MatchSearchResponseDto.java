@@ -5,6 +5,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.jackson.Jacksonized;
 import org.example.mercenary.domain.match.entity.MatchEntity;
+import org.example.mercenary.domain.match.entity.ApprovalPolicy;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -27,6 +28,7 @@ public class MatchSearchResponseDto {
     private final Double longitude;
     private final List<PositionSlotResponseDto> slots;
     private final boolean fullyBooked;
+    private final ApprovalPolicy approvalPolicy;
 
     public static MatchSearchResponseDto from(MatchEntity match, Double distance) {
         return MatchSearchResponseDto.builder()
@@ -44,6 +46,7 @@ public class MatchSearchResponseDto {
                         .map(PositionSlotResponseDto::from)
                         .collect(Collectors.toList()))
                 .fullyBooked(match.isFullyBooked())
+                .approvalPolicy(match.getApprovalPolicy())
                 .build();
     }
 }
