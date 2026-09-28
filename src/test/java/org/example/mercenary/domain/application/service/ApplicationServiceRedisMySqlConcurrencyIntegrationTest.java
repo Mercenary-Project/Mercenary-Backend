@@ -1,8 +1,12 @@
 package org.example.mercenary.domain.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import jakarta.persistence.EntityManagerFactory;
+import java.util.HashMap;
+import java.util.Map;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -25,12 +29,16 @@ import org.example.mercenary.domain.member.entity.MemberEntity;
 import org.example.mercenary.domain.member.entity.Role;
 import org.example.mercenary.domain.member.repository.MemberRepository;
 import org.example.mercenary.global.exception.ConflictException;
+import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean;
+import org.springframework.orm.jpa.vendor.HibernateJpaVendorAdapter;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.GenericContainer;
@@ -83,6 +91,12 @@ class ApplicationServiceRedisMySqlConcurrencyIntegrationTest {
 
     @Autowired
     private MemberRepository memberRepository;
+
+    @Autowired
+    private EntityManagerFactory entityManagerFactory;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     private MatchEntity match;
     private Long ownerId;
@@ -145,6 +159,37 @@ class ApplicationServiceRedisMySqlConcurrencyIntegrationTest {
         assertThat(applicationRepository.count()).isEqualTo(100);
         assertThat(applicationRepository.findAll())
                 .allMatch(application -> application.getStatus() == ApplicationStatus.READY);
+    }
+
+    @Test
+    @DisplayName("Flyway V7은 기존 VARCHAR 승인 정책 컬럼을 enum으로 변환해 운영 스키마 검증을 통과시킨다")
+    void approvalPolicyV7Migration_convertsVarcharForProductionSchemaValidation() {
+        jdbcTemplate.execute("""
+                ALTER TABLE matches
+                MODIFY COLUMN approval_policy VARCHAR(20) NOT NULL DEFAULT 'HOST_APPROVAL'
+                """);
+        Flyway.configure()
+                .dataSource(jdbcTemplate.getDataSource())
+                .locations("classpath:db/migration")
+                .baselineOnMigrate(true)
+                .baselineVersion("6")
+                .load()
+                .migrate();
+
+        LocalContainerEntityManagerFactoryBean validator = new LocalContainerEntityManagerFactoryBean();
+        validator.setDataSource(jdbcTemplate.getDataSource());
+        validator.setPackagesToScan("org.example.mercenary");
+        validator.setJpaVendorAdapter(new HibernateJpaVendorAdapter());
+
+        Map<String, Object> validationProperties = new HashMap<>(entityManagerFactory.getProperties());
+        validationProperties.put("hibernate.hbm2ddl.auto", "validate");
+        validator.setJpaPropertyMap(validationProperties);
+
+        try {
+            assertThatCode(validator::afterPropertiesSet).doesNotThrowAnyException();
+        } finally {
+            validator.destroy();
+        }
     }
 
     @Test
